@@ -163,7 +163,7 @@ export default function TicketsPage() {
               </button>
             ))}
           </div>
-          <div className="h-[calc(109px+var(--home-inset))]" />
+          <div className="h-[calc(92px+var(--home-inset))]" />
           </div>
         </Overlap>
       ) : (
@@ -175,7 +175,7 @@ export default function TicketsPage() {
               <TicketCard key={t.id} ticket={t} onOpen={() => setOpen(t)} />
             ))}
           </div>
-          <div className="h-[calc(109px+var(--home-inset))]" />
+          <div className="h-[calc(92px+var(--home-inset))]" />
         </div>
       )}
 

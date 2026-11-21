@@ -278,10 +278,10 @@ export function OffersView() {
           )}
         </div>
       )}
-      <div className="h-[calc(204px+var(--home-inset))]" />
+      <div className="h-[calc(187px+var(--home-inset))]" />
 
       {conn !== null && (
-        <div className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 items-center lg:bottom-5 lg:left-[calc(50%+124px)] lg:max-w-[672px] lg:rounded-[22px] lg:border lg:border-fg/10 gap-[8.5px] rounded-t-[22px] bg-[#1c1c1c] light:bg-white pt-[16.5px] pr-[18px] pb-[calc(var(--home-inset)+93px)] pl-4 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+        <div className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 items-center lg:bottom-5 lg:left-[calc(50%+124px)] lg:max-w-[672px] lg:rounded-[22px] lg:border lg:border-fg/10 gap-[8.5px] rounded-t-[22px] bg-[#1c1c1c] light:bg-white pt-[16.5px] pr-[18px] pb-[calc(var(--home-inset)+76px)] pl-4 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
           {/* The buttons are there from the start, and work once there is a price to pay. */}
           {!fare || total > 0 ? (
             <>

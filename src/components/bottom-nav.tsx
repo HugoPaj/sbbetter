@@ -43,7 +43,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 light:drop-shadow-[0_-1px_8px_rgba(0,0,0,0.12)] lg:hidden">
-      <div className="relative h-[calc(77px+var(--home-inset))] overflow-hidden">
+      <div className="relative h-[calc(60px+var(--home-inset))] overflow-hidden">
         {/* Bar background. With an active tab it is split around a pocket that shows the page behind. */}
         {active ? (
           <>
@@ -83,14 +83,6 @@ export function BottomNav() {
             );
           })}
         </ul>
-        {active && (
-          <p
-            className="pointer-events-none absolute top-[59px] -translate-x-1/2 text-[14px] leading-5 font-light tracking-tight whitespace-nowrap"
-            style={{ left: `calc(${cx})` }}
-          >
-            {active.label}
-          </p>
-        )}
       </div>
     </nav>
   );

@@ -223,7 +223,7 @@ export function TripMap({
       <section
         ref={sheetRef}
         aria-label="Trip sections"
-        className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[22px] bg-[#1c1c1c] light:bg-white pb-[calc(77px+var(--home-inset)+36px)] shadow-[0_-6px_24px_rgba(0,0,0,0.5)] lg:absolute lg:bottom-5 lg:left-5 lg:w-[400px] lg:translate-x-0 lg:rounded-[22px] lg:border lg:border-fg/10 lg:pb-4"
+        className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[22px] bg-[#1c1c1c] light:bg-white pb-[calc(60px+var(--home-inset)+36px)] shadow-[0_-6px_24px_rgba(0,0,0,0.5)] lg:absolute lg:bottom-5 lg:left-5 lg:w-[400px] lg:translate-x-0 lg:rounded-[22px] lg:border lg:border-fg/10 lg:pb-4"
       >
         <button
           aria-label={collapsed ? "Expand" : "Collapse"}

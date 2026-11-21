@@ -409,7 +409,7 @@ export function Toaster() {
   if (items.length === 0) return null;
   return (
     <Overlay>
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--home-inset)+98px)] z-[60] mx-auto flex max-w-[430px] flex-col items-center gap-1.5 px-4 lg:left-[248px]">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--home-inset)+81px)] z-[60] mx-auto flex max-w-[430px] flex-col items-center gap-1.5 px-4 lg:left-[248px]">
         {items.map((t) => (
           <p key={t.id} role="status" className="animate-fade-in max-w-full rounded-[15px] border border-fg/25 bg-[#2e2e2e] light:bg-white px-4 py-2.5 text-center text-[14.5px] leading-snug font-light tracking-tight shadow-lg shadow-black/60">
             {t.message}

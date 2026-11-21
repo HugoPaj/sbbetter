@@ -392,7 +392,7 @@ export function DetailView() {
           />
         </div>
       )}
-      {!mapMode && <div className="h-[calc(177px+var(--home-inset))]" />}
+      {!mapMode && <div className="h-[calc(160px+var(--home-inset))]" />}
       </div>
 
       {desktop && conn && (
@@ -403,7 +403,7 @@ export function DetailView() {
       )}
 
       {conn && !mapMode && !verdict?.alternative && (
-        <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px] lg:left-[248px] lg:w-[520px] lg:max-w-none lg:translate-x-0 lg:px-[24.5px]">
+        <div className="fixed bottom-[calc(var(--home-inset)+77px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px] lg:left-[248px] lg:w-[520px] lg:max-w-none lg:translate-x-0 lg:px-[24.5px]">
           {/* The way to the tickets is there from the start; only the amount waits for the price lookup. */}
           {covered ? (
             <OutlineButton href={offersHref} className="shadow-lg shadow-black/40">

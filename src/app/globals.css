@@ -33,10 +33,11 @@
   /* Tab bar. */
   --color-bar: #222;
   /*
-   * Space under the tab bar for the iPhone home indicator. The native app always
-   * reserves ~34pt; in a browser tab env() is 0, so keep at least that.
+   * Space under the tab bar's icon row. The icons already sit well above the bottom
+   * of their 60px row, so the row may overlap the iPhone home-indicator area (34pt) by
+   * 14px and stay clear of it; in a browser tab env() is 0, so keep a small margin.
    */
-  --home-inset: max(env(safe-area-inset-bottom), 34px);
+  --home-inset: max(calc(env(safe-area-inset-bottom) - 14px), 12px);
   /*
    * iOS 26+ home-screen web app workarounds: IOS_PWA_SCRIPT in layout.tsx overrides these
    * inline with values taken from the physical screen. --app-h replaces 100dvh (which can stop
@@ -131,7 +132,7 @@ body {
 
 /* MapLibre: collapsed "i" attribution button, on-theme and clear of the tab bar. */
 .maplibregl-map .maplibregl-ctrl-bottom-right {
-  bottom: calc(var(--home-inset) + 94px);
+  bottom: calc(var(--home-inset) + 77px);
   right: 14px;
 }
 .maplibregl-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
@@ -490,10 +491,10 @@ body {
   :root {
     /*
      * There is no tab bar on desktop (the side navigation replaces it). Every bottom
-     * offset in the app is written as `77px tab bar + --home-inset + gap`, so a
+     * offset in the app is written as `60px tab bar + --home-inset + gap`, so a
      * negative inset cancels the bar and leaves just the gap.
      */
-    --home-inset: -77px;
+    --home-inset: -60px;
   }
 
   button:not(:disabled),

@@ -654,7 +654,7 @@ export function EmptyState({
         <h2 className="text-[16px] font-bold">{title}</h2>
         <p className={cn("mt-[11.5px] leading-[20px] font-light tracking-tight hyphens-auto", compact ? "text-[13.5px]" : "text-[15.5px]")}>{text}</p>
       </div>
-      {action && <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+101px)] lg:inset-x-0 lg:bottom-10 lg:mx-auto lg:w-[400px]">{action}</div>}
+      {action && <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+84px)] lg:inset-x-0 lg:bottom-10 lg:mx-auto lg:w-[400px]">{action}</div>}
     </div>
   );
 }

@@ -136,7 +136,7 @@ export default function ShopPage() {
             ))}
           </Card>
         )}
-        <div className="h-[calc(95px+var(--home-inset))]" />
+        <div className="h-[calc(78px+var(--home-inset))]" />
       </Overlap>
 
       {product && <ProductSheet product={product.p} place={product.place} onClose={() => setProduct(null)} />}

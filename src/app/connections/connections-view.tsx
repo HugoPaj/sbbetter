@@ -234,7 +234,7 @@ export function ConnectionsView() {
       )}
       </div>
       </div>
-      <div className="h-[calc(109px+var(--home-inset))]" />
+      <div className="h-[calc(92px+var(--home-inset))]" />
       {dayOpen && asked && (
         <DayPrices
           title={ahead ? formatLongDate(new Date((asked.from.departureTimestamp ?? 0) * 1000)) : "Today"}
