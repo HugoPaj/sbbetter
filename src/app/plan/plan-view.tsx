@@ -12,13 +12,12 @@ import { CommuteSetup } from "@/components/commute";
 import { CommuteMemory } from "@/components/line-memory";
 import { EasyRideCard, EasyRideView, useRiding } from "@/components/easyride";
 import { OtherTicketsSheet } from "@/components/shop";
-import { FakeQr, TicketSheet } from "@/components/ticket";
 import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint, type Position } from "@/lib/use-position";
 import { commuteQuery, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { getConnections, nearbyStations, searchLocations, type Connection } from "@/lib/transport";
 import { DelayLabel, delayNote } from "@/components/journey";
 import { actions, useAppState, useStoreReady, type Commute, type SavedTrip, type Ticket } from "@/lib/store";
-import { formatDate, haversine, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
+import { haversine, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 
 type View = "timetable" | "easyride";
@@ -133,7 +132,6 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
   // Waited for here, not inside CommuteCard: one skeleton stays mounted through both waits instead of being swapped for another (which re-runs its fade-in, a flash).
   const at = useWhereAmI(commute, pos);
 
-  const [openTicket, setOpenTicket] = useState<Ticket | null>(null);
   const [all, setAll] = useState(false);
   const riding = useRiding();
   const upcomingAll = now === null ? [] : upcomingItems(trips, tickets, now * 1000);
@@ -166,9 +164,9 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
           <Card className="overflow-hidden">
             {upcoming.map((u) =>
               u.trip ? (
-                <UpcomingRow key={u.trip.id} trip={u.trip} ticket={u.ticket} status={TRIP_STATUS[String(settings[`sim:${u.trip.id}`])]} onTicket={setOpenTicket} />
+                <UpcomingRow key={u.trip.id} trip={u.trip} status={TRIP_STATUS[String(settings[`sim:${u.trip.id}`])]} />
               ) : (
-                u.ticket && <TicketRow key={u.ticket.id} ticket={u.ticket} onOpen={() => setOpenTicket(u.ticket!)} />
+                u.ticket && <TicketRow key={u.ticket.id} ticket={u.ticket} nowMs={now! * 1000} />
               ),
             )}
             {upcomingAll.length > UPCOMING_MAX && (
@@ -204,7 +202,6 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
       )}
 
       <div className="h-[calc(92px+var(--home-inset))]" />
-      {openTicket && <TicketSheet ticket={openTicket} valid onClose={() => setOpenTicket(null)} />}
       {setup && <CommuteSetup initial={commute} onClose={() => setSetup(false)} />}
     </div>
   );
@@ -503,11 +500,10 @@ const TRIP_STATUS: Record<string, string> = {
   cancelled: "Your train is cancelled. Tap to see what to do.",
 };
 
-/** A saved trip; when a valid ticket covers it, the ticket's code sits beside it, one tap from full screen. */
-function UpcomingRow({ trip: t, ticket, status, onTicket }: { trip: SavedTrip; ticket?: Ticket; status?: string; onTicket: (t: Ticket) => void }) {
+/** A saved trip: tap for its journey. Its ticket (if any) lives on the Tickets page. */
+function UpcomingRow({ trip: t, status }: { trip: SavedTrip; status?: string }) {
   return (
-    <div className="flex items-center border-b border-line last:border-b-0">
-      <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className={cn(ROW, "min-w-0 flex-1 border-b-0")}>
+    <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className={ROW}>
         <div className="w-[52px] shrink-0 text-center">
           <p className="text-[16px] leading-tight font-bold">{formatTime(t.departure)}</p>
           <p className="text-[11.5px] leading-tight font-light text-fg/70">{formatShortDate(new Date(t.departure))}</p>
@@ -524,32 +520,23 @@ function UpcomingRow({ trip: t, ticket, status, onTicket }: { trip: SavedTrip; t
             </p>
           )}
         </div>
-        {!ticket && <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />}
-      </Link>
-      {ticket && (
-        <button aria-label={`Show ticket: ${ticket.product}`} onClick={() => onTicket(ticket)} className="shrink-0 py-2 pr-3.5 pl-1">
-          <FakeQr seed={ticket.id} className="size-11 rounded" />
-        </button>
-      )}
-    </div>
+        <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+    </Link>
   );
 }
 
-/** A valid ticket with no saved trip: tap for its code. */
-function TicketRow({ ticket: t, onOpen }: { ticket: Ticket; onOpen: () => void }) {
-  const until = new Date(t.validTo);
-  const sameDay = formatDate(until) === formatDate(new Date());
+/** A valid ticket with no saved trip: tap for connections on its route (from now, or from when it becomes valid). The ticket itself is on the Tickets page. */
+function TicketRow({ ticket: t, nowMs }: { ticket: Ticket; nowMs: number }) {
+  const label = t.to ? <Route from={t.from} to={t.to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{t.from || t.product}</p>;
+  // A zone or area ticket has no destination to route to.
+  if (!t.to) return <div className={ROW}><div className="min-w-0 flex-1">{label}</div></div>;
+  const at = zurichDateTime(new Date(Math.max(nowMs, Date.parse(t.validFrom))));
+  const href = journeyHref("/connections", { from: t.from, fromName: t.from, to: t.to, toName: t.to, ...at, isArrivalTime: false, transportations: [], ...(t.via ? { via: t.via, viaName: t.via } : {}) });
   return (
-    <button onClick={onOpen} className={ROW}>
-      <div className="min-w-0 flex-1">
-        {t.to ? <Route from={t.from} to={t.to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{t.from || t.product}</p>}
-        <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
-          {t.product} · valid until {sameDay ? "" : `${formatShortDate(until)}, `}
-          {formatTime(t.validTo)}
-        </p>
-      </div>
-      <FakeQr seed={t.id} className="size-11 shrink-0 rounded" />
-    </button>
+    <Link href={href} className={ROW}>
+      <div className="min-w-0 flex-1">{label}</div>
+      <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+    </Link>
   );
 }
 
