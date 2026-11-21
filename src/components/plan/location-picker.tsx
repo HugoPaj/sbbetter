@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, History, Search } from "lucide-react";
+import { ChevronLeft, History, Map as MapIcon, Search } from "lucide-react";
 import { searchLocations, type Location } from "@/lib/transport";
 import { CURRENT_LOCATION, type Endpoint } from "@/lib/use-position";
 import { FAVOURITES } from "@/lib/mock-data";
@@ -10,6 +10,7 @@ import { StopIcon, TargetIcon } from "../icons";
 import { Overlay, useEscape } from "../ui";
 import { ModeBadge } from "../journey";
 import { ListRowsSkeleton } from "../skeletons";
+import { MapPicker } from "./map-picker";
 
 const ICON_CATEGORY: Record<string, string> = { bus: "B", train: "IR", tram: "T", ship: "BAT", cableway: "GB" };
 
@@ -19,19 +20,23 @@ export function LocationPicker({
   onPick: pick,
   onClose,
   allowCurrent = true,
+  mapMode = "stop",
 }: {
   title: string;
   onPick: (e: Endpoint) => void;
   onClose: () => void;
   allowCurrent?: boolean;
+  /** "Choose on map" returns the exact spot ("point") or the nearest stop ("stop"). */
+  mapMode?: "point" | "stop";
 }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Location[]>([]);
   const [loading, setLoading] = useState(false);
+  const [onMap, setOnMap] = useState(false);
   const { recentStops } = useAppState();
   /** Remember picked stops (not "Current location") to offer them in the next search. */
   const onPick = (e: Endpoint) => {
-    if (e.id !== CURRENT_LOCATION) actions.addRecentStop({ id: e.id, name: e.name });
+    if (e.id !== CURRENT_LOCATION && !e.id.startsWith("coord:")) actions.addRecentStop({ id: e.id, name: e.name });
     pick(e);
   };
 
@@ -94,6 +99,10 @@ export function LocationPicker({
               <span>Current location</span>
             </Row>
           )}
+          <Row onClick={() => setOnMap(true)}>
+            <MapIcon className="size-5 shrink-0 text-fg/70" strokeWidth={1.5} />
+            <span>Choose on map</span>
+          </Row>
           {q.trim().length < 2 &&
             recentStops.map((r) => (
               <Row key={`recent-${r.id}`} onClick={() => onPick(r)}>
@@ -126,6 +135,7 @@ export function LocationPicker({
         </ul>
         </div>
       </div>
+      {onMap && <MapPicker title={title} mode={mapMode} onClose={() => setOnMap(false)} onPick={onPick} />}
     </Overlay>
   );
 }

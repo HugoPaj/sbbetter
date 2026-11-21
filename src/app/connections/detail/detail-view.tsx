@@ -14,6 +14,8 @@ import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
 import { Capacity, DelayLabel, LineLabel, ModeBadge, delayNote, useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
+import { ClosureDetails, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
+import { closureOf } from "@/lib/line-memory";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { SCENARIOS, assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { disruptionEnd } from "@/lib/disruption-forecast";
@@ -68,6 +70,8 @@ export function DetailView() {
   const conn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
   /** Delay model forecast per ride of `conn`, in minutes (keyed by section index). */
   const forecast = useForecast(conn);
+  /** What happened the last times the stretches of this route were disrupted. */
+  const routeMemory = useRouteMemory(conn);
   const passes = usePasses();
   const { trips } = useAppState();
   const [sheet, setSheet] = useState<"more" | "sim" | "time" | null>(null);
@@ -169,7 +173,7 @@ export function DetailView() {
       ? {
           query,
           id: `${key ?? ""}~${altKey}`,
-          params: rerouteParams({ from: altQuery.from, date: altQuery.date, time: altQuery.time, key: altKey, at: alt.rejoin.at, late: alt.rejoin.late }),
+          params: rerouteParams({ from: altQuery.from, date: altQuery.date, time: altQuery.time, key: altKey, at: alt.rejoin.at, late: alt.rejoin.late, via: altQuery.via }),
           departure: conn.from.departure ?? "",
         }
       : { query: altQuery, id: altKey, params: undefined, departure: chosen.from.departure ?? "" };
@@ -260,6 +264,13 @@ export function DetailView() {
       });
     c.sections.slice(0, opts.to).forEach((s, i) => {
       const minutes = Math.round((s.walk?.duration ?? 0) / 60);
+      // Straight from one train to the next at the same station: show the change as its own step.
+      const prev = legs.at(-1);
+      if (s.journey && prev?.kind === "ride" && keyOf(prev.section.arrival) === keyOf(s.departure)) {
+        const t0 = prev.section.arrival.arrivalTimestamp ?? undefined;
+        const t1 = s.departure.departureTimestamp;
+        if (t0 && t1 && t1 > t0) legs.push({ kind: "change", minutes: Math.round((t1 - t0) / 60), t0, at: s.departure });
+      }
       legs.push(
         s.journey
           ? { kind: "ride", section: s, status: opts.status?.(i), depNote: opts.note?.(i), forecast: c === conn ? forecast?.[i] : undefined }
@@ -318,11 +329,20 @@ export function DetailView() {
     conn && alt && chosen && brokenAt >= 0
       ? { connection: chosen, lateMinutes: lateBy(chosen), onAccept: () => acceptAlternative(chosen), onOthers: showOthers }
       : undefined;
+  // Line memory. A line closed right now (from the live service messages) is told inside the alert;
+  // on a normal day each train carries the way round staff advised for its line.
+  const liveClosure = conn && routeMemory && clock !== null ? closureOf(conn.disruptions, routeMemory.memory, clock * 1000) : null;
+  const quiet = !!routeMemory && !verdict && !checking && !liveClosure;
   const mainLegs = !conn
     ? []
-    : legsOf(conn, { status: statusAt, note: changeNote }).map((l) =>
-        box && l.kind === "ride" && l.section === conn.sections[brokenAt] ? { ...l, instead: <Instead box={box} /> } : l,
-      );
+    : legsOf(conn, { status: statusAt, note: changeNote }).map((l): Leg => {
+        if (l.kind !== "ride") return l;
+        return {
+          ...l,
+          instead: box && l.section === conn.sections[brokenAt] ? <Instead box={box} /> : undefined,
+          memory: quiet ? <LegMemory route={routeMemory} section={conn.sections.indexOf(l.section)} conn={conn} query={query} /> : undefined,
+        };
+      });
 
   const mapMode = !desktop && view === "map" && !!conn;
   const toggleView = () => {
@@ -380,8 +400,22 @@ export function DetailView() {
               checking || verdict || conn.disruptions?.length || pass ? (
                 <>
                   {checking && <p className="text-[14.5px] font-light text-muted">Checking your journey…</p>}
-                  {verdict && <VerdictBanner verdict={verdict} />}
-                  {!!conn.disruptions?.length && <DisruptionNotices disruptions={conn.disruptions} />}
+                  {verdict && (
+                    <VerdictBanner
+                      verdict={verdict}
+                      more={
+                        verdict.closure &&
+                        routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={verdict.closure} offeredVia={verdict.alternative?.query.viaName} />
+                      }
+                    />
+                  )}
+                  {!!conn.disruptions?.length && (
+                    <DisruptionNotices
+                      disruptions={conn.disruptions}
+                      planB={liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      details={liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                    />
+                  )}
                   {pass && <PassNotice pass={pass} pricing={!fare} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
                 </>
               ) : null
@@ -579,30 +613,35 @@ function PassNotice({ pass, pricing, trip }: { pass: PassSaving; /** The saving 
   const { headline, detail } = passNotice(pass, trip);
   // Holds the place of "You save CHF …" so the notice doesn't grow when the price arrives.
   const saving = pricing && <Skeleton className="inline-block h-[11px] w-[104px] align-middle" />;
+  const [open, setOpen] = useState(false);
   return (
-    <div className="flex items-start gap-2.5">
-      <Ticket className="mt-px size-4.5 shrink-0 text-ok" strokeWidth={2} />
-      <div className="min-w-0 flex-1">
-        <p className="text-[14.5px] leading-snug font-bold">{headline}</p>
-        <p className="mt-0.5 text-[13px] leading-snug font-light text-fg/80">
+    <div>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-start gap-2.5 text-left">
+        <Ticket className="mt-px size-4.5 shrink-0 text-ok" strokeWidth={2} />
+        <span className="flex-1 text-[14.5px] leading-snug font-bold">{headline}</span>
+        <ChevronDown className={cn("mt-px size-4.25 shrink-0 transition-transform", open && "rotate-180")} strokeWidth={1.5} />
+      </button>
+      {open && (
+        <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">
           {detail}
           {saving}
         </p>
-      </div>
+      )}
     </div>
   );
 }
 
-/** A live service message, shown at the head of the timeline. */
 /**
  * Live service messages at the head of the timeline: one alert row, however many there are.
  * Several collapse into "2 service alerts on your route", expanding to each summary.
+ * When a line is closed, line memory adds the way round (`planB`, always visible) and
+ * what usually happens next (`details`, in the expanded part).
  */
-function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
+function DisruptionNotices({ disruptions, planB, details }: { disruptions: Disruption[]; planB?: ReactNode; details?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const single = disruptions.length === 1;
   const more = (d: Disruption) => d.description || d.reason;
-  const expandable = !single || !!more(disruptions[0]);
+  const expandable = !single || !!more(disruptions[0]) || !!details;
   return (
     <div>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={!expandable} className="flex w-full items-start gap-2.5 text-left">
@@ -611,9 +650,10 @@ function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
         {expandable && <ChevronDown className={cn("mt-px size-4.25 shrink-0 transition-transform", open && "rotate-180")} strokeWidth={1.5} />}
       </button>
       <LikelyOver disruptions={disruptions} />
+      {planB}
       {open &&
         (single ? (
-          <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{more(disruptions[0])}</p>
+          more(disruptions[0]) && <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{more(disruptions[0])}</p>
         ) : (
           <ul className="mt-2 space-y-2 pl-7">
             {disruptions.map((d, i) => (
@@ -624,6 +664,7 @@ function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
             ))}
           </ul>
         ))}
+      {open && details}
     </div>
   );
 }
@@ -650,6 +691,7 @@ type Leg =
       status?: LegStatus;
       /** Shown under the boarding stop. */ depNote?: Note;
       /** Replacement shown in place of this leg. */ instead?: ReactNode;
+      /** Line memory for this train: the way round if its line closes. */ memory?: ReactNode;
       /** Delay model forecast for the arrival, minutes (see delayNote). */ forecast?: number;
     }
   | {
@@ -663,6 +705,14 @@ type Leg =
       from?: Checkpoint;
       to?: Checkpoint;
       onOpen: (metres: number) => void;
+    }
+  | {
+      /** Time between two trains at the same station. */
+      kind: "change";
+      minutes: number;
+      /** Planned arrival of the train before, in seconds. */
+      t0: number;
+      at: Checkpoint;
     };
 
 /** A place on the timeline: where one leg ends and the next begins. */
@@ -736,12 +786,16 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
     if (leg.kind === "ride") {
       const { section: s, status } = leg;
       const cat = s.journey!.category;
-      const pill = status?.kind === "cancelled" ? "Cancelled" : status?.kind === "missed" ? "Missed" : undefined;
+      const pill = status?.kind === "cancelled" ? "Cancelled" : status?.kind === "missed" ? "Missed" : status?.kind === "closed" ? "Line closed" : undefined;
       place({ key: keyOf(s.departure), name: s.departure.station.name ?? "", checkpoint: s.departure, dep: formatTime(s.departure.departure), depCp: pill ? undefined : s.departure, depGone: !!pill, pill, note: leg.depNote, depPl: platformLabel(s.departure.prognosis?.platform ?? s.departure.platform, cat) });
       items.push({ type: "leg", leg });
       last = null;
       const late = status?.kind === "late" && s.arrival.arrivalTimestamp ? formatTime(new Date((s.arrival.arrivalTimestamp + status.minutes * 60) * 1000).toISOString()) : undefined;
       place({ key: keyOf(s.arrival), name: s.arrival.station.name ?? "", checkpoint: s.arrival, arr: formatTime(s.arrival.arrival), arrLate: late, delayed: !!late, arrCp: late ? undefined : s.arrival, forecast: leg.forecast, pill: late && `+${(status as { minutes: number }).minutes} min late`, arrPl: platformLabel(s.arrival.prognosis?.platform ?? s.arrival.platform, cat) });
+    } else if (leg.kind === "change") {
+      items.push({ type: "leg", leg });
+      last = null;
+      place({ key: keyOf(leg.at), name: leg.at.station.name ?? "", checkpoint: leg.at });
     } else {
       if (!leg.minutes && (!leg.from || !leg.to || keyOf(leg.from) === keyOf(leg.to))) continue;
       if (leg.start) place({ key: "origin", name: leg.start.name, dep: leg.start.time });
@@ -756,9 +810,9 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
 
 const LINE = "absolute left-1/2 -translate-x-1/2";
 /** Two rail styles only: solid for riding, dotted for walking. Travelled is bright, ahead is dimmed. */
-const lineStyle = (leg: Leg) => (leg.kind === "walk" ? "w-0 border-l-[3px] border-dotted border-fg" : "w-[3px] bg-fg");
+const lineStyle = (leg: Leg) => (leg.kind !== "ride" ? "w-0 border-l-[3px] border-dotted border-fg" : "w-[3px] bg-fg");
 const legOf = (item?: Item) => (item?.type === "leg" ? item.leg : null);
-const gone = (leg: Leg) => leg.kind === "ride" && (leg.status?.kind === "cancelled" || leg.status?.kind === "missed");
+const gone = (leg: Leg) => leg.kind === "ride" && !!leg.status && leg.status.kind !== "late";
 /** The "you are here" look, shared by the marker on a rail and the stop being waited at. */
 const HERE = "ring-4 ring-fg/25";
 
@@ -777,6 +831,10 @@ function schedule(items: Item[]): (Span | null)[] {
       const { departure, arrival } = leg.section;
       t0 = Math.max(departure.departureTimestamp ?? end, end);
       t1 = Math.max((arrival.arrivalTimestamp ?? t0) + (leg.status?.kind === "late" ? leg.status.minutes * 60 : 0), t0);
+    } else if (leg.kind === "change") {
+      // A late arrival eats into the change; the next train still leaves on time.
+      t0 = Math.max(leg.t0, end);
+      t1 = Math.max(leg.t0 + leg.minutes * 60, t0);
     } else {
       t0 = Math.max(leg.t0 ?? end, end);
       t1 = t0 + leg.minutes * 60;
@@ -800,7 +858,7 @@ function moments(items: Item[]): { label: string; at: number }[] {
       if (out.length === 1) out.push({ label: `At ${nameAt(i - 1)}`, at: s.t0 });
       break;
     }
-    out.push({ label: leg.kind === "ride" ? `On the ${leg.section.journey!.category} ${leg.section.journey!.number ?? ""}`.trim() : `Walking to ${nameAt(i + 1)}`, at: Math.round((s.t0 + s.t1) / 2) });
+    out.push({ label: leg.kind === "ride" ? `On the ${leg.section.journey!.category} ${leg.section.journey!.number ?? ""}`.trim() : leg.kind === "change" ? `Changing at ${nameAt(i + 1)}` : `Walking to ${nameAt(i + 1)}`, at: Math.round((s.t0 + s.t1) / 2) });
     const next = spans[i + 2];
     if (!next) out.push({ label: "Arrived", at: s.t1 });
     else if (next.off || next.t0 > s.t1) out.push({ label: `At ${nameAt(i + 1)}`, at: next.off ? s.t1 : Math.round((s.t1 + next.t0) / 2) });
@@ -829,7 +887,9 @@ function transitionNames(items: Item[]): string[] {
         ? `n-${it.node.key}`
         : it.leg.kind === "ride"
           ? `r-${it.leg.section.journey!.category}${it.leg.section.journey!.number}-${keyOf(it.leg.section.departure)}`
-          : `w-${it.leg.start ? "origin" : it.leg.from ? keyOf(it.leg.from) : ""}-${it.leg.to ? keyOf(it.leg.to) : ""}`;
+          : it.leg.kind === "change"
+            ? `c-${keyOf(it.leg.at)}`
+            : `w-${it.leg.start ? "origin" : it.leg.from ? keyOf(it.leg.from) : ""}-${it.leg.to ? keyOf(it.leg.to) : ""}`;
     const clean = base.replace(/[^a-zA-Z0-9_-]/g, "_");
     const n = (seen.get(clean) ?? 0) + 1;
     seen.set(clean, n);
@@ -949,6 +1009,15 @@ function Segment({ leg, style, onStop }: { leg: Leg; style: CSSProperties; onSto
     );
   }
 
+  if (leg.kind === "change") {
+    return (
+      <div style={style} className="col-start-3 my-3 ml-3 flex items-center gap-2 rounded-full border border-fg/30 py-2 pr-3.5 pl-3.5 text-[14.5px] leading-5 font-light">
+        <WalkIcon className="size-4.25 shrink-0" />
+        Change · {Math.max(1, leg.minutes)} min
+      </div>
+    );
+  }
+
   const j = leg.section.journey!;
   const stops = j.passList.slice(1, -1);
   return (
@@ -975,6 +1044,7 @@ function Segment({ leg, style, onStop }: { leg: Leg; style: CSSProperties; onSto
           ))}
         </ul>
       )}
+      {!gone(leg) && leg.memory}
       {leg.instead}
     </div>
   );

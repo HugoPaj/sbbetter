@@ -95,7 +95,7 @@ export function SideNav() {
     <nav aria-label="Main" className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col bg-[#161616] light:bg-white lg:flex">
       {/* Same height and colour as the page header, so the red bar runs across the whole window. */}
       <Link href="/plan" className="flex h-16 shrink-0 items-center gap-3 bg-sbb-red px-6 text-white">
-        <SbbLogo className="h-5 w-[31.5px]" />
+        <SbbLogo className="h-[34.5px] w-[30.5px]" />
         <span className="text-[17px] font-bold tracking-tight">SBBetter</span>
       </Link>
       <ul className="flex-1 space-y-1 overflow-y-auto border-r border-fg/10 p-3">

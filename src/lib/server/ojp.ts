@@ -368,6 +368,8 @@ function placeCoords(ctx: X): Map<string, { lat: number; lon: number }> {
 export type OjpTripQuery = {
   from: string;
   to: string;
+  /** A stop the trip has to pass through. */
+  via?: string;
   date?: string;
   time?: string;
   isArrivalTime?: boolean;
@@ -377,13 +379,15 @@ export type OjpTripQuery = {
 };
 
 export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Promise<Connection[]> {
-  const [origin, destination] = await Promise.all([placeRef(q.from, signal), placeRef(q.to, signal)]);
+  const [origin, destination, via] = await Promise.all([placeRef(q.from, signal), placeRef(q.to, signal), q.via ? placeRef(q.via, signal) : null]);
+  // A ViaPoint is a place reference itself, not a wrapper around one.
+  const viaPoint = via ? `\n      <Via><ViaPoint>${via.replace(/<\/?PlaceRef>/g, "")}</ViaPoint></Via>` : "";
   const when = `<DepArrTime>${zurichIso(q.date, q.time)}</DepArrTime>`;
   const { delivery: d, raw } = await ojpRaw(
     `<OJPTripRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <Origin>${origin}${q.isArrivalTime ? "" : when}</Origin>
-      <Destination>${destination}${q.isArrivalTime ? when : ""}</Destination>
+      <Destination>${destination}${q.isArrivalTime ? when : ""}</Destination>${viaPoint}
       <Params>
         <NumberOfResults>${q.limit ?? 6}</NumberOfResults>
         <IncludeIntermediateStops>true</IncludeIntermediateStops>

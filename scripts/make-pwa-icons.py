@@ -8,6 +8,7 @@ double arrow (our own drawing, not the trademark) with a "+" for "better".
 public/icons/icon-{192,512}.png   rounded tile, for the manifest ("any")
 public/icons/maskable-512.png     full-bleed, artwork inside the 80 % safe zone ("maskable")
 src/app/apple-icon.png            180 px full-bleed; iOS rounds the corners itself
+src/app/favicon.ico               16/32/48 px rounded tile, for browser tabs
 """
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -40,4 +41,5 @@ for size in (192, 512):
     tile(size, rounded=True, scale=1).save(ROOT / f"public/icons/icon-{size}.png")
 tile(512, rounded=False, scale=0.8).save(ROOT / "public/icons/maskable-512.png")
 tile(180, rounded=False, scale=0.9).convert("RGB").save(ROOT / "src/app/apple-icon.png")
+tile(256, rounded=True, scale=1).save(ROOT / "src/app/favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
 print("icons written")

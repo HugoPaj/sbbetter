@@ -172,7 +172,7 @@ export function TripMap({
   }, [collapsed]);
 
   useEffect(() => {
-    chips.current[active]?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+    chips.current[active]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }, [active]);
 
   const onScroll = () => {

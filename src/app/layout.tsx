@@ -42,6 +42,7 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"
  *    still covers the page, so never go below the status bar height (59pt Dynamic Island,
  *    47pt notch, 20pt home button).
  * Re-runs after load/resize because the first values iOS reports while parsing can be wrong.
+ * On every iPhone (browser or installed) it also keeps the document scrolled to the top: see pin().
  * Add `?vp` to the URL to show the measured values on the device (`?vp=0` hides them again).
  */
 const IOS_PWA_SCRIPT = `(function(){
@@ -53,10 +54,22 @@ try{var q=location.search.match(/[?&]vp(=0)?\\b/);if(q)localStorage.setItem("sbb
 var debug=false;try{debug=localStorage.getItem("sbb-vp")==="1"}catch(e){}
 var ios=/iP(hone|od|ad)/.test(n.userAgent)||(n.platform==="MacIntel"&&n.maxTouchPoints>1);
 var app=n.standalone===true||matchMedia("(display-mode: standalone)").matches||matchMedia("(display-mode: fullscreen)").matches;
+function typing(){var a=document.activeElement;return !!a&&(/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)||a.isContentEditable)}
+/* On phones only #app-scroll scrolls; the document must stay at the top. iOS scrolls the
+   document to bring a focused field above the keyboard and (iOS 26) often leaves it scrolled
+   after the keyboard closes, shifting the whole app (header included) up off the screen. */
+function pin(){if(innerWidth<1024&&!typing()&&(scrollY||scrollX||d.scrollTop||document.body.scrollTop)){scrollTo(0,0);d.scrollTop=0;document.body.scrollTop=0}}
+if(ios){
+  addEventListener("scroll",pin,{passive:true});
+  document.addEventListener("focusout",function(){setTimeout(pin,0);setTimeout(pin,350)});
+  if(window.visualViewport){visualViewport.addEventListener("resize",pin);visualViewport.addEventListener("scroll",pin)}
+  addEventListener("pageshow",pin);
+}
 if(!(ios&&app)&&!debug)return;
 var info={};
 function fix(){
-  var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  pin();
+  if(typing())return;
   var w=Math.min(screen.width,screen.height),h=Math.max(screen.width,screen.height),vw=d.clientWidth||innerWidth;
   var p=document.createElement("div");
   p.style.cssText="position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100dvh;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
@@ -69,12 +82,13 @@ function fix(){
     d.style.setProperty("--safe-top",Math.round(Math.max(top,bar*k))+"px");
     d.dataset.iosApp="";
   }else{d.style.removeProperty("--app-h");d.style.removeProperty("--safe-top");delete d.dataset.iosApp}
-  info.appH=d.style.getPropertyValue("--app-h");info.safeTop=d.style.getPropertyValue("--safe-top");
+  info.scrollY=scrollY;info.vvTop=window.visualViewport?Math.round(visualViewport.offsetTop):"-";info.appH=d.style.getPropertyValue("--app-h");info.safeTop=d.style.getPropertyValue("--safe-top");
   if(debug){var b=document.getElementById("vp-debug");if(!b){b=document.createElement("pre");b.id="vp-debug";b.style.cssText="position:fixed;left:8px;top:45%;z-index:99999;margin:0;padding:6px 8px;font:11px/1.35 ui-monospace,monospace;color:#0f0;background:rgba(0,0,0,.85);border-radius:6px;pointer-events:none;white-space:pre";document.body.appendChild(b)}b.textContent=JSON.stringify(info,null,1).replace(/[{}"]/g,"").trim()}
 }
 fix();
 ["DOMContentLoaded","load","pageshow","resize","orientationchange"].forEach(function(e){addEventListener(e,fix)});
 if(window.visualViewport)visualViewport.addEventListener("resize",fix);
+if(debug)addEventListener("scroll",function(){setTimeout(fix,50)},{passive:true});
 setTimeout(fix,300);setTimeout(fix,1500);
 })()`;
 

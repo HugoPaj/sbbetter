@@ -5,18 +5,40 @@ import { DEFAULT_POSITION } from "./mock-data";
 import { zurichDateTime } from "./format";
 import type { JourneyQuery } from "./journey-query";
 
-export type Position = { lat: number; lon: number; real: boolean };
+/**
+ * `settled`: a fix arrived, failed, or took too long; until then `real: false` only means "not yet".
+ * `accuracy`: the fix's radius of uncertainty in metres (0 when not real).
+ */
+export type Position = { lat: number; lon: number; real: boolean; settled: boolean; accuracy: number };
 
-/** Browser geolocation with an EPFL fallback (handy for demos). */
+/** Give up waiting for a first fix (e.g. an unanswered permission prompt) after this long and use the fallback. */
+const SETTLE_AFTER = 6000;
+
+/**
+ * Browser geolocation with an EPFL fallback (handy for demos). A quick, possibly cached fix comes
+ * first so the page can settle fast; a high-accuracy one then refines it.
+ */
 export function usePosition(): Position {
-  const [pos, setPos] = useState<Position>({ ...DEFAULT_POSITION, real: false });
+  const [pos, setPos] = useState<Position>({ ...DEFAULT_POSITION, real: false, settled: false, accuracy: 0 });
   useEffect(() => {
-    if (!("geolocation" in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
-      (p) => setPos({ lat: p.coords.latitude, lon: p.coords.longitude, real: true }),
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-    );
+    const settle = () => setPos((p) => (p.settled ? p : { ...p, settled: true }));
+    if (!("geolocation" in navigator)) return settle();
+    let live = true;
+    const timer = setTimeout(settle, SETTLE_AFTER);
+    const take = (g: GeolocationPosition) =>
+      live &&
+      setPos((p) =>
+        // Never trade a sharper fix for a vaguer one (the quick fix can land after the precise one).
+        p.real && p.accuracy < g.coords.accuracy ? p : { lat: g.coords.latitude, lon: g.coords.longitude, real: true, settled: true, accuracy: g.coords.accuracy },
+      );
+    // Denied: settle now instead of after the timer.
+    navigator.permissions?.query({ name: "geolocation" }).then((s) => s.state === "denied" && live && settle(), () => {});
+    navigator.geolocation.getCurrentPosition(take, () => {}, { enableHighAccuracy: false, timeout: SETTLE_AFTER, maximumAge: 10 * 60_000 });
+    navigator.geolocation.getCurrentPosition(take, () => live && settle(), { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 });
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, []);
   return pos;
 }

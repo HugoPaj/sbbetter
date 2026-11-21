@@ -96,6 +96,16 @@ export function useAppState(): State {
   return useSyncExternalStore(subscribe, load, () => EMPTY);
 }
 
+const noSubscribe = () => () => {};
+
+/**
+ * False on the server and during hydration, when `useAppState` still returns the empty state:
+ * the saved state isn't known yet, so don't present "nothing saved" as fact.
+ */
+export function useStoreReady(): boolean {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
+
 export const actions = {
   addTicket(t: Ticket) {
     const s = load();

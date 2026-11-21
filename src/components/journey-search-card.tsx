@@ -123,6 +123,7 @@ export function JourneySearchCard({
       {(sheet === "from" || sheet === "to") && (
         <LocationPicker
           title={sheet === "from" ? "From" : "To"}
+          mapMode="point"
           allowCurrent={false}
           onClose={() => setSheet(null)}
           onPick={(e) => {

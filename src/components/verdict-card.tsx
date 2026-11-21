@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, CircleCheck, TriangleAlert } from "lucide-react";
 import { cn } from "./ui";
 import type { Verdict } from "@/lib/disruption";
@@ -10,7 +10,7 @@ import type { Verdict } from "@/lib/disruption";
  * journey timeline; the affected legs and the suggested alternative are drawn
  * inside the timeline itself.
  */
-export function VerdictBanner({ verdict }: { verdict: Verdict }) {
+export function VerdictBanner({ verdict, more }: { verdict: Verdict; /** Shown with the explanation, once expanded. */ more?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const alt = verdict.alternative;
   const Icon = verdict.tone === "ok" ? CircleCheck : TriangleAlert;
@@ -24,6 +24,7 @@ export function VerdictBanner({ verdict }: { verdict: Verdict }) {
       {/* With an alternative, the "Take instead" box in the timeline says what to do. */}
       {!alt && <p className="mt-1 pl-7 text-[14.5px] leading-snug font-light">{verdict.detail}</p>}
       {open && <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{verdict.why} (Simulated for this demo.)</p>}
+      {open && more}
     </div>
   );
 }

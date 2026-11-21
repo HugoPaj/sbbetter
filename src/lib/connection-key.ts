@@ -63,10 +63,10 @@ export async function fetchConnection(q: JourneyQuery, key: string | null, signa
  * then continue with the connection `key` searched from `from` at `date` `time`.
  * Lives in the URL (r* params) so reloads, saved trips and sharing keep it.
  */
-export type Reroute = { from: string; date: string; time: string; key: string; at: number; late: number };
+export type Reroute = { from: string; date: string; time: string; key: string; at: number; late: number; /** The onward connection was searched via this stop (a way round a closed line). */ via?: string };
 
 export function rerouteParams(r: Reroute): Record<string, string> {
-  return { rfrom: r.from, rdate: r.date, rtime: r.time, rkey: r.key, rat: String(r.at), rlate: String(r.late) };
+  return { rfrom: r.from, rdate: r.date, rtime: r.time, rkey: r.key, rat: String(r.at), rlate: String(r.late), ...(r.via ? { rvia: r.via } : {}) };
 }
 
 export function rerouteFromSearchParams(sp: URLSearchParams): Reroute | null {
@@ -75,7 +75,7 @@ export function rerouteFromSearchParams(sp: URLSearchParams): Reroute | null {
   const date = sp.get("rdate");
   const time = sp.get("rtime");
   if (!from || !key || !date || !time) return null;
-  return { from, key, date, time, at: Number(sp.get("rat") ?? 0), late: Number(sp.get("rlate") ?? 0) };
+  return { from, key, date, time, at: Number(sp.get("rat") ?? 0), late: Number(sp.get("rlate") ?? 0), via: sp.get("rvia") ?? undefined };
 }
 
 function apiDuration(min: number): string {
@@ -127,7 +127,7 @@ export async function loadConnection(q: JourneyQuery, sp: URLSearchParams, signa
   const key = sp.get("key");
   const r = rerouteFromSearchParams(sp);
   if (!r) return fetchConnection(q, key, signal, opts);
-  const onwardQuery: JourneyQuery = { ...q, from: r.from, fromName: r.from, date: r.date, time: r.time, isArrivalTime: false, walkMinutes: undefined, via: undefined, viaName: undefined };
+  const onwardQuery: JourneyQuery = { ...q, from: r.from, fromName: r.from, date: r.date, time: r.time, isArrivalTime: false, walkMinutes: undefined, via: r.via, viaName: r.via };
   const [planned, onward] = await Promise.all([fetchConnection(q, key, signal, opts), fetchConnection(onwardQuery, r.key, signal, opts)]);
   if (!planned || !onward) return planned;
   return stitch(planned, onward, r.at);

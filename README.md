@@ -24,6 +24,7 @@ pnpm build && pnpm start
 | Prices / offers | **Live** NOVA prices (cheapest ticket, e.g. Supersaver, full fare or Half Fare) via the OJP Fare API when `OJP_FARE_API_KEY` is set — `src/lib/server/ojp-fare.ts`, `src/lib/fares.ts`. Otherwise a **mock** estimate by distance — `src/lib/pricing.ts`. Class upgrades and City add-ons are always modelled |
 | User, travelcards, favourites | **Mock** — `src/lib/mock-data.ts` |
 | Disruption verdict card | **Simulated** disruption (Connection → ⋮ → "Simulate a disruption"), **live** recommended alternative — `src/lib/disruption.ts` |
+| Line memory | **Real history** from the SBB hackathon export: every disruption of a stretch since March 2024, the detour staff recommended, the usual order of events — `public/line-memory.json`, `src/lib/line-memory.ts`. The way round is a **live** connection. See "Line memory" below |
 | Purchased tickets, saved trips | `localStorage` — `src/lib/store.ts` (Profile → "Reset demo data") |
 
 ## Layout
@@ -57,7 +58,7 @@ handler decides the upstream:
   shape. It also adds `accessWalk` (walk from a `coord:lat,lon` origin) and `disruptions` (OJP
   situations) to connections. Stop ids are converted from `ch:1:sloid:N` to UIC (`8500000 + N`).
 - **transport.opendata.ch** as the fallback, and for features not mapped to OJP yet (product
-  filters from Advanced search, `via`).
+  filters from Advanced search). `via` goes to OJP as a `<Via><ViaPoint>`.
 
 The `X-Data-Source: ojp | opendata` response header shows which one answered. To get a key, sign up at
 [api-manager.opentransportdata.swiss](https://api-manager.opentransportdata.swiss), subscribe to
@@ -76,3 +77,35 @@ class. Gotchas:
 - It is an integration test system that prices only future trips, and only within Switzerland.
 
 Note: in the opendata shape `coordinate.x` is **latitude** and `y` is **longitude**.
+
+## Line memory
+
+Disruptions repeat, and so does the advice: when Biel/Bienne – Reuchenette-Péry broke, staff wrote
+"travel via Neuchâtel" four times out of six, on average over an hour in. Line memory gives that
+advice at minute zero.
+
+```bash
+python3 scripts/build-line-memory.py path/to/Daten   # → public/line-memory.json (~100 KB)
+```
+
+The script reads the hackathon export (public live ticker incidents and staff messages, the control
+centre's KULT log) and writes, per stretch: every past disruption with cause and duration, the
+detours staff recommended ("via …") with a quote and how late the advice came, replacement buses,
+and where tickets were also valid. Per cause it writes the usual order of events. Station names are
+matched to the official stop list (`scripts/train-stops.json`, from data.sbb.ch).
+
+In the app (`src/components/line-memory.tsx`):
+
+It never gets a row of its own; it sits where it applies:
+
+- **Connection page, normal day**: one muted line under the train it concerns, "If this line closes:
+  Plan B via Biel/Bienne". It opens a short sheet: that Plan B searched live for this journey, then three
+  or four facts about the stretch (how often, how long, buses, tickets), with the dated history folded away. Only shown when staff advised a way round before; counts and durations stay in the sheet.
+- **Connection page, during a disruption** (a live service message, or ⋮ → "Simulate a disruption" →
+  "Line closed"): inside the alert. The way round as a real connection sits directly under
+  "Likely over around …"; expanding the alert adds what usually happens next, with clock times.
+- **Plan → Commuting**: a slim last line of the commute card, "Plan B ready: via Neuchâtel".
+
+A connection is matched to a stretch by its stops, and for trains that run through without stopping
+by the path travelled (OJP leg projection). Without OJP only stops count, so fast trains match less.
+A detour is only offered when the connection found does not run over the closed stretch after all.

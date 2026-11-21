@@ -2,6 +2,7 @@ import type { JourneyQuery } from "./journey-query";
 import { toConnectionsRequest } from "./journey-query";
 import { queryForConnection } from "./connection-key";
 import { formatTime, zurichDateTime } from "./format";
+import { causeLabel, findPlanB, loadLineMemory, stretchName, stretchesOn, timesWord, type Closure } from "./line-memory";
 import { getConnections, type Connection, type Section } from "./transport";
 
 /**
@@ -10,22 +11,25 @@ import { getConnections, type Connection, type Section } from "./transport";
  *
  * The disruption itself is SIMULATED (the live feed can't produce one on
  * demand); the recommended alternative is a real connection from the timetable.
+ * A closed line is simulated on a stretch this route really runs over, with the
+ * cause and the detour from that stretch's own history (see line-memory.ts).
  */
 
-export type Scenario = "delay" | "missed" | "cancelled";
+export type Scenario = "delay" | "missed" | "cancelled" | "closed";
 
 export const SCENARIOS: { value: Scenario | ""; label: string; hint: string }[] = [
   { value: "", label: "No disruption", hint: "The journey runs as planned." },
   { value: "delay", label: "Small delay", hint: "A few minutes late, the change still works." },
   { value: "missed", label: "Missed connection", hint: "The first train is too late for the change." },
   { value: "cancelled", label: "Cancelled train", hint: "The first train does not run." },
+  { value: "closed", label: "Line closed", hint: "The line ahead is interrupted, on a stretch where it has happened before." },
 ];
 
 /** ok = nothing to do · changed = new plan, confirm it · act = you must move. */
 export type Tone = "ok" | "changed" | "act";
 
 /** What happens to one ride, drawn on that leg of the timeline. */
-export type LegStatus = { kind: "late"; minutes: number } | { kind: "cancelled" } | { kind: "missed" };
+export type LegStatus = { kind: "late"; minutes: number } | { kind: "cancelled" } | { kind: "missed" } | { kind: "closed" };
 
 export type Verdict = {
   tone: Tone;
@@ -42,9 +46,13 @@ export type Verdict = {
     /** Set when the alternative only replaces the trip from a change station on: keep sections up to `at` (ridden `late` min late). */
     rejoin?: { at: number; late: number };
   };
+  /** A closed line: what line memory needs to say what usually happens next. */
+  closure?: Closure;
 };
 
 const SMALL_DELAY = 4;
+/** A simulated closure began this long ago: early enough that SBB's own advice is usually still to come. */
+const CLOSED_FOR = 12;
 const WHY_LATE = "Signal fault on the line. Trains in this area are running late.";
 
 const lineOf = (s: Section) => [s.journey?.category, s.journey?.number].filter(Boolean).join(" ");
@@ -70,6 +78,8 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
   const line = lineOf(first.s);
   const plannedArrival = formatTime(conn.to.arrival);
   const arrivalPlus = (m: number) => formatTime(new Date(((conn.to.arrivalTimestamp ?? 0) + m * 60) * 1000).toISOString());
+
+  if (scenario === "closed") return closed(conn, query, first.i, signal);
 
   if (scenario === "cancelled") {
     const dep = conn.from.departureTimestamp ?? 0;
@@ -133,5 +143,46 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
     why: `${WHY_LATE} ${line} is ${delay} min late, and the ${lineOf(next.s)} can't wait.`,
     notes: { [first.i]: { kind: "late", minutes: delay }, [next.i]: { kind: "missed" } },
     alternative: alt && { query: queryForConnection(onward, alt), connection: alt, lateMinutes: lateBy(alt, conn), rejoin: { at: first.i, late: delay } },
+  };
+}
+
+/**
+ * The line ahead is closed. Simulated on the most disrupted stretch this route runs
+ * over that has a known way round (else the most disrupted one), with that stretch's
+ * usual cause. The way round is the detour staff recommended there, as a real connection.
+ */
+async function closed(conn: Connection, query: JourneyQuery, firstRide: number, signal?: AbortSignal): Promise<Verdict> {
+  const memory = await loadLineMemory();
+  const hits = stretchesOn(conn, memory);
+  const hit = hits.find((h) => h.stretch.detours.length) ?? hits[0];
+  const start = new Date(Date.now() - CLOSED_FOR * 60000).toISOString();
+  if (!hit) {
+    return {
+      tone: "act",
+      headline: "The line ahead is closed",
+      detail: "This stretch has no history of disruptions yet, so there is no known way round. Please check other connections.",
+      why: "Trains cannot run on a part of your route.",
+      notes: { [firstRide]: { kind: "closed" } },
+      closure: { stretch: null, cause: "ALL", start, simulated: true },
+    };
+  }
+  const { stretch, section: at } = hit;
+  const cause = stretch.causes[0]?.[0] ?? "ALL";
+  const leg = conn.sections[at];
+  // Stretches the journey only reaches after a change keep the legs before it: the way round starts at that change.
+  const rejoin = at > firstRide;
+  const from: JourneyQuery = rejoin
+    ? { ...query, from: leg.departure.station.id ?? leg.departure.station.name ?? query.from, fromName: leg.departure.station.name ?? query.fromName, ...zurichDateTime(new Date((leg.departure.departureTimestamp ?? 0) * 1000)), isArrivalTime: false, walkMinutes: undefined, via: undefined, viaName: undefined }
+    : queryForConnection(query, conn);
+  const planB = await findPlanB(from, conn.to.arrivalTimestamp ?? 0, stretch, signal);
+  const where = stretch.ends.length > 1 ? `between ${stretch.ends[0].name} and ${stretch.ends[1].name}` : `at ${stretch.ends[0].name}`;
+  return {
+    tone: "act",
+    headline: `The line is closed ${where}`,
+    detail: planB ? `Go via ${planB.detour.via}: take the ${boarding(planB.connection)}.` : "No way round is known for this stretch. Please check other connections.",
+    why: `${causeLabel(memory, cause)}. ${stretchName(stretch)} has been disrupted ${timesWord(stretch.n)} before.`,
+    notes: { [at]: { kind: "closed" } },
+    alternative: planB ? { query: planB.query, connection: planB.connection, lateMinutes: Math.max(0, planB.extraMinutes), rejoin: rejoin ? { at: at - 1, late: 0 } : undefined } : undefined,
+    closure: { stretch: stretch.key, cause, start, simulated: true },
   };
 }

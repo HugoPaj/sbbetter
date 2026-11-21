@@ -47,11 +47,13 @@ export function useEscape(onClose: () => void) {
   return ref;
 }
 
-/** Simplified double-arrow mark (drawn from scratch, not the official asset). */
+/** SBBetter mark: a play on the SBB double arrow with a "+" (our own drawing, not the official asset; same shapes as scripts/make-pwa-icons.py).
+ * The viewBox runs as far below the arrow as the "+" sits above it, so the arrow is what gets centred. */
 export function SbbLogo({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 32" preserveAspectRatio="none" className={className} aria-label="SBB" fill="currentColor">
-      <path d="M16 4h9l-8 8h13V4h4v8h13l-8-8h9l12 12-12 12h-9l8-8H34v8h-4v-8H17l8 8h-9L4 16z" />
+    <svg viewBox="10 10 80 90" className={className} aria-label="SBBetter" fill="currentColor">
+      <path d="M10 55 28 37h12L25 52h50L60 37h12l18 18-18 18H60l15-15H25l15 15H28z" />
+      <path d="M74 10h6v7h7v6h-7v7h-6v-7h-7v-6h7z" />
     </svg>
   );
 }
@@ -96,7 +98,7 @@ export function Header({
             </button>
           )}
           <h1 className="text-[17.5px] font-light tracking-tight lg:text-[21px] lg:font-normal">{title}</h1>
-          <SbbLogo className="absolute -right-0.5 h-5 w-[31.5px] lg:hidden" />
+          <SbbLogo className="absolute -right-0.5 h-[34.5px] w-[30.5px] lg:hidden" />
         </div>
         {children && <div className="mt-[2.5px] lg:mt-0 lg:w-[380px]">{children}</div>}
       </header>

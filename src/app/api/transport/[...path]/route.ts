@@ -73,12 +73,13 @@ async function fromOjp(endpoint: string, sp: URLSearchParams, signal: AbortSigna
     case "connections": {
       const from = sp.get("from");
       const to = sp.get("to");
-      // Product filters / via / paging aren't mapped to OJP yet.
-      if (!from || !to || sp.has("via") || sp.has("page") || sp.has("transportations[]")) return null;
+      // Product filters / paging aren't mapped to OJP yet.
+      if (!from || !to || sp.has("page") || sp.has("transportations[]")) return null;
       const connections = await ojpConnections(
         {
           from,
           to,
+          via: sp.get("via") ?? undefined,
           date: sp.get("date") ?? undefined,
           time: sp.get("time") ?? undefined,
           isArrivalTime: sp.get("isArrivalTime") === "1",
