@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Car, SunMoon, CircleHelp, CircleUserRound, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
+import { Bell, Car, SunMoon, CircleHelp, CircleUserRound, IdCard, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
 import { useState } from "react";
 import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
@@ -25,6 +25,7 @@ export default function ProfilePage() {
         <SectionTitle>Profile Settings</SectionTitle>
         <Card className="overflow-hidden">
           <ListRow icon={User} label="Personal details" onClick={() => setSheet("personal")} />
+          <ListRow icon={IdCard} label="Travelcards" onClick={() => setSheet("travelcards")} />
           <ListRow icon={Users} label="Co-passenger" onClick={() => setSheet("copassenger")} />
           <ListRow icon={Car} label="Licence plates" onClick={() => setSheet("plates")} />
           <ListRow icon={WalletMinimal} label="Wallet" onClick={() => setSheet("wallet")} />

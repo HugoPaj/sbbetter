@@ -14,7 +14,7 @@ import { formatLongDate, formatShortDate, zurichDateTime } from "@/lib/format";
 import { usePrices, useQuotes } from "@/lib/fares";
 import { CHEAPER_SETTING, cheaperNearby, cheaperThatDay, fetchDay, fetchNearby, plannedAhead, searchWindow, type CheaperPriority } from "@/lib/cheaper";
 import { useSetting } from "@/lib/store";
-import { USER_PASSES } from "@/lib/mock-data";
+import { usePasses } from "@/lib/travelcards";
 import { connectionKey, queryForConnection, rememberConnections, uniqueConnections } from "@/lib/connection-key";
 
 type Result = {
@@ -32,6 +32,7 @@ type Result = {
 
 export function ConnectionsView() {
   const router = useRouter();
+  const passes = usePasses();
   const sp = useSearchParams();
   const query = journeyFromSearchParams(new URLSearchParams(sp.toString()));
   const queryKey = sp.toString();
@@ -81,10 +82,10 @@ export function ConnectionsView() {
   const load = () => setRetry((n) => n + 1);
   // Only while its sheet is open: a closed sheet shouldn't keep spending the price API's quota.
   const dayItems = day?.key === result.key && day.open ? day.items : [];
-  const priceOf = usePrices(items, USER_PASSES);
+  const priceOf = usePrices(items, passes);
   // Departures that are only compared with the requested one get a lighter price lookup (the price API is rate limited).
   const candidates = items ? [...items, ...result.nearby, ...dayItems] : [];
-  const quoteOf = useQuotes(showPrices ? candidates : null, USER_PASSES);
+  const quoteOf = useQuotes(showPrices ? candidates : null, passes);
 
   if (!query) {
     return (

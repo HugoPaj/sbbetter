@@ -16,10 +16,10 @@ import { VerdictBanner } from "@/components/verdict-card";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { SCENARIOS, assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { disruptionEnd } from "@/lib/disruption-forecast";
+import { usePasses } from "@/lib/travelcards";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
 import { passNotice, type PassSaving } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
-import { USER_PASSES } from "@/lib/mock-data";
 import { coverageOf } from "@/lib/passes";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import { getConnections, type Checkpoint, type Connection, type Disruption, type Section } from "@/lib/transport";
@@ -79,6 +79,7 @@ export function DetailView() {
   const conn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
   /** Delay model forecast per ride of `conn`, in minutes (keyed by section index). */
   const forecast = useForecast(conn);
+  const passes = usePasses();
   const { trips } = useAppState();
   const [sheet, setSheet] = useState<"more" | "sim" | "time" | null>(null);
   const clock = useNow();
@@ -132,7 +133,7 @@ export function DetailView() {
     return () => ctrl.abort();
   }, [conn, raw, scenario, assessId]);
 
-  const priceOf = usePrices(conn ? [conn] : null, USER_PASSES);
+  const priceOf = usePrices(conn ? [conn] : null, passes);
   if (!query) return <ErrorBox message="No journey selected." />;
 
   const verdict = scenario && assessed.id === assessId ? assessed.verdict : null;
@@ -146,7 +147,7 @@ export function DetailView() {
    * The traveller's own trip needs no ticket: only upgrades and tickets for people travelling along are left to sell.
    * Known from the travelcards alone, before any price has loaded.
    */
-  const coverage = conn ? coverageOf(conn, USER_PASSES) : null;
+  const coverage = conn ? coverageOf(conn, passes) : null;
   const covered = fare ? !!fare.pass && price === 0 : !!coverage?.pass && coverage.parts.length === 0;
   const offersHref = journeyHref("/offers", query, { key: key ?? "", ...rParams });
   const fromLabel = query.fromName === "Current location" ? "Your chosen location" : query.fromName;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { FAVOURITES, seedExpiredTickets } from "./mock-data";
+import { DEFAULT_TRAVELCARDS, FAVOURITES, seedExpiredTickets } from "./mock-data";
+import type { TravelcardSelection } from "./travelcards";
 import type { JourneyQuery } from "./journey-query";
 
 /**
@@ -33,6 +34,8 @@ export type SavedTrip = {
 };
 
 export type Favourite = { id: string; line1: string; line2: string };
+/** A stop picked in a search, offered again in the next one. */
+export type RecentStop = { id: string; name: string };
 export type CoPassenger = { id: string; name: string; birthDate: string; reduction: string };
 export type Commute = { from: string; fromName: string; to: string; toName: string; outTime: string; backTime: string };
 export type SettingValue = string | number | boolean;
@@ -45,11 +48,15 @@ type State = {
   coPassengers: CoPassenger[];
   plates: string[];
   commute: Commute | null;
+  /** Stops picked in searches, newest first. */
+  recentStops: RecentStop[];
+  /** The traveller's travelcards (Profile → Travelcards). */
+  travelcards: TravelcardSelection;
   /** Free-form persisted switches / choices (profile settings, shop stop, …). */
   settings: Record<string, SettingValue>;
 };
 
-const EXTRA = { favourites: FAVOURITES as Favourite[], coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, settings: {} as Record<string, SettingValue> };
+const EXTRA = { favourites: FAVOURITES as Favourite[], coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, recentStops: [] as RecentStop[], travelcards: DEFAULT_TRAVELCARDS, settings: {} as Record<string, SettingValue> };
 const fresh = (): State => ({ tickets: seedExpiredTickets(), trips: [], ...EXTRA });
 
 const KEY = "sbb-proto-state-v1";
@@ -106,6 +113,10 @@ export const actions = {
   removeTicket(id: string) {
     const s = load();
     save({ ...s, tickets: s.tickets.filter((t) => t.id !== id) });
+  },
+  addRecentStop(stop: RecentStop, max = 8) {
+    const s = load();
+    save({ ...s, recentStops: [stop, ...s.recentStops.filter((r) => r.id !== stop.id)].slice(0, max) });
   },
   set(patch: Partial<Omit<State, "settings">>) {
     save({ ...load(), ...patch });

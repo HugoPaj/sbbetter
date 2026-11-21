@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, Search } from "lucide-react";
+import { ChevronLeft, History, Search } from "lucide-react";
 import { searchLocations, type Location } from "@/lib/transport";
 import { CURRENT_LOCATION, type Endpoint } from "@/lib/use-position";
 import { FAVOURITES } from "@/lib/mock-data";
+import { actions, useAppState } from "@/lib/store";
 import { StopIcon, TargetIcon } from "../icons";
 import { Overlay, useEscape } from "../ui";
 import { ModeBadge } from "../journey";
@@ -15,7 +16,7 @@ const ICON_CATEGORY: Record<string, string> = { bus: "B", train: "IR", tram: "T"
 /** Full-screen stop/address search. Desktop: a centred dialog. */
 export function LocationPicker({
   title,
-  onPick,
+  onPick: pick,
   onClose,
   allowCurrent = true,
 }: {
@@ -27,6 +28,12 @@ export function LocationPicker({
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Location[]>([]);
   const [loading, setLoading] = useState(false);
+  const { recentStops } = useAppState();
+  /** Remember picked stops (not "Current location") to offer them in the next search. */
+  const onPick = (e: Endpoint) => {
+    if (e.id !== CURRENT_LOCATION) actions.addRecentStop({ id: e.id, name: e.name });
+    pick(e);
+  };
 
   useEffect(() => {
     if (q.trim().length < 2) return;
@@ -88,7 +95,14 @@ export function LocationPicker({
             </Row>
           )}
           {q.trim().length < 2 &&
-            FAVOURITES.map((f) => (
+            recentStops.map((r) => (
+              <Row key={`recent-${r.id}`} onClick={() => onPick(r)}>
+                <History className="size-5 shrink-0 text-fg/70" strokeWidth={1.5} aria-label="Recent" />
+                <span>{r.name}</span>
+              </Row>
+            ))}
+          {q.trim().length < 2 &&
+            FAVOURITES.filter((f) => !recentStops.some((r) => r.id === f.id || r.name === f.id)).map((f) => (
               <Row key={f.id} onClick={() => onPick({ id: f.id, name: f.id })}>
                 <StopIcon className="size-5 shrink-0 text-fg/70" />
                 <span>{f.id}</span>

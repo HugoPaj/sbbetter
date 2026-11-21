@@ -1,5 +1,5 @@
 import type { Checkpoint, Connection } from "./transport";
-import { GRAND_LAUSANNE, inArea, type ZoneArea } from "./zones";
+import type { LocalPass } from "./travelcards";
 
 /**
  * Travelcards and what they cover on a given connection.
@@ -15,22 +15,26 @@ import { GRAND_LAUSANNE, inArea, type ZoneArea } from "./zones";
  *  - in the morning it is valid up to the last stop reached before 05:00/07:00.
  * Public holidays (also 07:00) and night supplements are not modelled.
  *
- * Zone passes (src/lib/zones.ts) are valid at any time between stops inside
- * their zones. Beyond them you need a ticket from the last stop the vehicle
- * calls at inside the zones, which is exactly a stop-to-stop rule.
+ * Zone and area passes (src/lib/travelcards.ts, from NOVA tariff data) are valid
+ * at any time on the edges between stops they cover. Beyond them you need a
+ * ticket from the last stop the vehicle calls at inside, which is exactly a
+ * stop-to-stop rule.
  */
-export type Passes = { halfFare: boolean; ga: boolean; nightGa: boolean; zones: ZoneArea | null };
-
-export function passesFromTravelcards(cards: string[]): Passes {
-  const has = (re: RegExp) => cards.some((c) => re.test(c));
-  return { halfFare: has(/half[- ]fare/i), ga: has(/^GA\b/i), nightGa: has(/night GA/i), zones: has(/mobilis.*11.*12/i) ? GRAND_LAUSANNE : null };
-}
+export type Passes = {
+  halfFare: boolean;
+  /** Name of a card valid everywhere, all day ("GA", "Swiss Travel Pass"); null without one. */
+  ga: string | null;
+  nightGa: boolean;
+  /** Zone and area passes. */
+  local: LocalPass[];
+};
 
 /** "Night GA", "Night GA and Mobilis pass". */
 const joined = (names: string[]) => names.join(" and ");
 
 type Spot = { lat: number; lon: number };
-const inZones = (passes: Passes, at: Spot | null | undefined) => !!passes.zones && !!at && inArea(passes.zones, at.lat, at.lon);
+/** The zone/area pass valid at this spot, if any. */
+const localAt = (passes: Passes, at: Spot | null | undefined) => (at ? passes.local.find((p) => p.containsSpot(at.lat, at.lon)) : undefined);
 
 /** A stop of a connection: `leg` counts the rides (sections with a journey), `stop` indexes that ride's passList. */
 export type StopRef = { leg: number; stop: number };
@@ -71,16 +75,18 @@ export function inNightGaWindow(timestamp: number): boolean {
  * zones would be used; leave it out for travel that may go anywhere.
  */
 export function passCovering(passes: Passes, startMs: number, endMs: number, local?: Spot | null): string | null {
-  if (passes.ga) return "GA";
-  if (inZones(passes, local)) return passes.zones!.name;
+  if (passes.ga) return passes.ga;
+  const zone = localAt(passes, local);
+  if (zone) return zone.name;
   if (passes.nightGa && endMs - startMs < 10 * 3600_000 && inNightGaWindow(startMs / 1000) && inNightGaWindow(endMs / 1000)) return "Night GA";
   return null;
 }
 
 /** The same for a pass bought now and valid until the end of service: covered once the evening window has opened. */
 export function passCoveringRestOfDay(passes: Passes, nowMs: number, local?: Spot | null): string | null {
-  if (passes.ga) return "GA";
-  if (inZones(passes, local)) return passes.zones!.name;
+  if (passes.ga) return passes.ga;
+  const zone = localAt(passes, local);
+  if (zone) return zone.name;
   return passes.nightGa && zurichClock(nowMs / 1000).minutes >= 19 * 60 ? "Night GA" : null;
 }
 
@@ -92,8 +98,9 @@ export function passCoveringRestOfDay(passes: Passes, nowMs: number, local?: Spo
  */
 export function uncovered(passes: Passes, startMs: number, endMs: number, ends?: { from: Spot | null; to: Spot | null }): { minutes: number; pass: string | null } {
   const total = Math.max(1, Math.round((endMs - startMs) / 60_000));
-  if (passes.ga) return { minutes: 0, pass: "GA" };
-  if (ends && inZones(passes, ends.from) && inZones(passes, ends.to)) return { minutes: 0, pass: passes.zones!.name };
+  if (passes.ga) return { minutes: 0, pass: passes.ga };
+  const zone = ends && localAt(passes, ends.from);
+  if (zone && ends.to && zone.containsSpot(ends.to.lat, ends.to.lon)) return { minutes: 0, pass: zone.name };
   if (!passes.nightGa) return { minutes: total, pass: null };
   let n = 0;
   for (let i = 0; i < total; i++) if (!inNightGaWindow((startMs + i * 60_000) / 1000)) n++;
@@ -138,25 +145,19 @@ export function coverageOf(c: Connection, passes: Passes): Coverage {
   return coverage;
 }
 
-/** Both stops inside the zones of the pass. */
-const zonesCover = (area: ZoneArea, h: Hop) => {
-  const a = h.from.station.coordinate;
-  const b = h.to.station.coordinate;
-  return inArea(area, a.x, a.y) && inArea(area, b.x, b.y);
-};
-
 function compute(c: Connection, passes: Passes): Coverage {
-  if (passes.ga) return { pass: "GA", several: false, parts: [] };
+  if (passes.ga) return { pass: passes.ga, several: false, parts: [] };
   const hops = hopsOf(c);
   const night = hops.map((h) => passes.nightGa && nightGaCovers(h));
-  const zone = hops.map((h) => !!passes.zones && zonesCover(passes.zones, h));
-  const covered = hops.map((_, i) => night[i] || zone[i]);
+  // The first zone/area pass valid on each hop.
+  const zone = hops.map((h) => passes.local.find((p) => p.covers(h.from, h.to)));
+  const covered = hops.map((_, i) => night[i] || !!zone[i]);
   // Name only the cards the traveller needs here: just one of them if it covers everything the other does.
   const nightNeeded = night.some((n, i) => n && !zone[i]);
-  const zoneNeeded = zone.some((z, i) => z && !night[i]);
+  const zoneNames = [...new Set(zone.filter((z, i) => z && (!night[i] || !nightNeeded)).map((z) => z!.name))];
   const names: string[] = [];
   if (nightNeeded) names.push("Night GA");
-  if (zoneNeeded || (zone.some(Boolean) && !nightNeeded)) names.push(passes.zones!.name);
+  names.push(...zoneNames);
   // Consecutive uncovered hops form one ticket, also across a change of trains.
   const parts: PaidPart[] = [];
   hops.forEach((h, i) => {

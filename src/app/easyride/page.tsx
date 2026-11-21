@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Card, Checkbox, Header, InfoLine, OutlineButton, PrimaryButton, Sheet, toast } from "@/components/ui";
 import { EmptyState } from "@/components/scene";
 import { actions, useSetting } from "@/lib/store";
-import { DEFAULT_POSITION, USER_PASSES } from "@/lib/mock-data";
+import { DEFAULT_POSITION } from "@/lib/mock-data";
+import { usePasses } from "@/lib/travelcards";
 import { passCovering, uncovered } from "@/lib/passes";
 import { nearbyStations } from "@/lib/transport";
 
@@ -35,6 +36,7 @@ const parseSpot = (v: string): Spot | null => {
 /** EasyRide: mock set-up, then check-in / check-out with a running timer. */
 export default function EasyRidePage() {
   const router = useRouter();
+  const passes = usePasses();
   const [ready, setReady] = useSetting<boolean>("easyride.ready", false);
   // The running journey is persisted so it survives tab switches and reloads.
   const [checkedInAt, setCheckedInAt] = useSetting<number>("easyride.since", 0);
@@ -61,14 +63,14 @@ export default function EasyRidePage() {
   // While a travelcard is valid there is nothing to charge, so no check-in is offered.
   const [free, setFree] = useState<string | null>(null);
   useEffect(() => {
-    const check = () => setFree(passCovering(USER_PASSES, Date.now(), Date.now()));
+    const check = () => setFree(passCovering(passes, Date.now(), Date.now()));
     const first = setTimeout(check, 0);
     const id = setInterval(check, 30_000);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
-  }, []);
+  }, [passes]);
   const noCheckIn = ready && !checkedInAt && !!free;
 
   const elapsed = checkedInAt && now ? Math.max(0, Math.floor((now - checkedInAt) / 1000)) : 0;
@@ -96,7 +98,7 @@ export default function EasyRidePage() {
     setCheckingOut(false);
     const minutes = Math.max(1, Math.round((end - checkedInAt) / 60000));
     // Only what no travelcard covers is charged: nothing inside the zones of a zone pass, and with the Night GA only the minutes before 19:00 / after 05:00.
-    const { minutes: charged, pass } = uncovered(USER_PASSES, checkedInAt, end, { from: parseSpot(startedAt), to: here });
+    const { minutes: charged, pass } = uncovered(passes, checkedInAt, end, { from: parseSpot(startedAt), to: here });
     // MOCK fare: short-distance price plus a little per minute, half fare.
     const price = charged ? Math.ceil((2.3 + Math.max(0, charged - 10) * 0.22) * 5) / 5 : 0;
     setSummary({ minutes, charged, pass, price, from: from || "Current location", start: checkedInAt, end });

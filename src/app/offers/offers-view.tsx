@@ -13,13 +13,15 @@ import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
 import { coverageOf } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
-import { USER, USER_PASSES, fullName } from "@/lib/mock-data";
+import { fullName } from "@/lib/mock-data";
+import { usePasses } from "@/lib/travelcards";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Connection } from "@/lib/transport";
 
 type Offer = "regular" | "supersaver" | "p2p";
 
 export function OffersView() {
+  const passes = usePasses();
   const router = useRouter();
   const sp = useSearchParams();
   const raw = sp.toString();
@@ -55,7 +57,7 @@ export function OffersView() {
     return () => ctrl.abort();
   }, [raw, key]);
 
-  const priceOf = usePrices(conn ? [conn] : null, USER_PASSES);
+  const priceOf = usePrices(conn ? [conn] : null, passes);
   if (!query) return <ErrorBox message="No journey selected." />;
 
   // With a travelcard covering part of the trip, the ticket is for the uncovered stretch only,
@@ -85,10 +87,10 @@ export function OffersView() {
    * part of it: which tickets are left to buy then depends on the prices. Until the price
    * arrives, the offers are shown as they are, with only the amounts still to come.
    */
-  const known = !!conn && (!!fare || !coverageOf(conn, USER_PASSES).pass);
+  const known = !!conn && (!!fare || !coverageOf(conn, passes).pass);
   const base = fare ? (klass === "1" ? fare.firstClass : fare.secondClass) : 0;
   // Modelled, not looked up: it never waits for the price.
-  const cityAddOn = fare?.cityAddOn ?? (conn ? estimateFare(conn, { halfFare: USER_PASSES.halfFare }).cityAddOn : null);
+  const cityAddOn = fare?.cityAddOn ?? (conn ? estimateFare(conn, { halfFare: passes.halfFare }).cityAddOn : null);
   const cityOn = city && !arrivalCovered;
   const perPerson =
     base +
@@ -302,7 +304,7 @@ export function OffersView() {
             <Line label="Route" value={pass?.tickets.length && klass === "2" ? pass.tickets.map((t) => `${t.from} → ${t.to}`).join(", ") : `${fromName} → ${toName}`} />
             <Line label="Class" value={effectiveClass === 1 ? "1st class" : "2nd class"} />
             <Line label="Ticket" value={isReturn ? "Return" : "Single"} />
-            {(USER.halfFare || pass) && <Line label="Reduction" value={[USER.halfFare && "Half Fare Travelcard", pass?.name].filter(Boolean).join(", ")} />}
+            {(passes.halfFare || pass) && <Line label="Reduction" value={[passes.halfFare && "Half Fare Travelcard", pass?.name].filter(Boolean).join(", ")} />}
             <div className="border-t border-line pt-2.5">
               <Line label={<b className="font-bold">Total</b>} value={<b className="font-bold">CHF {total.toFixed(2)}</b>} />
             </div>
