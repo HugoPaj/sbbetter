@@ -50,6 +50,11 @@
    * reaches below the safe area, so in the installed app titles need to clear it.
    */
   --top-gap: 0px;
+  /*
+   * Where a full-height sheet starts: a little below the status bar. (A fixed 44px put the sheet's
+   * title and close button under the iOS status bar, which is 47-62pt tall.)
+   */
+  --sheet-top: max(44px, calc(var(--safe-top) + 10px));
   /* Full screen height on phones; use instead of 100dvh. */
   --app-h: 100dvh;
 }
@@ -60,7 +65,7 @@
   @media (display-mode: standalone) and (max-aspect-ratio: 1/2) {
     :root {
       --safe-top: max(env(safe-area-inset-top), 47px);
-      --top-gap: 12px;
+      --top-gap: 20px;
     }
   }
 }
@@ -127,7 +132,7 @@ body {
     transform: translate(0);
   }
   :root[data-ios-app] {
-    --top-gap: 12px;
+    --top-gap: 20px;
   }
 }
 

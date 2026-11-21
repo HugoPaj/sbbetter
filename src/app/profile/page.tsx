@@ -6,9 +6,11 @@ import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useSetting } from "@/lib/store";
 import { ProfileSheets, type ProfileSheet } from "./sheets";
+import { SERVICES, ServiceSheet } from "@/components/shop";
 
 export default function ProfilePage() {
   const [sheet, setSheet] = useState<ProfileSheet | null>(null);
+  const [service, setService] = useState<string | null>(null);
   const [loggedOut, setLoggedOut] = useSetting<boolean>("loggedOut", false);
   return (
     <div>
@@ -39,6 +41,13 @@ export default function ProfilePage() {
           <ListRow icon={SunMoon} label="Appearance" onClick={() => setSheet("appearance")} />
         </Card>
 
+        <SectionTitle>Services</SectionTitle>
+        <Card className="overflow-hidden">
+          {SERVICES.map((s) => (
+            <ListRow key={s.label} icon={s.icon} label={s.label} onClick={() => setService(s.label)} />
+          ))}
+        </Card>
+
         <SectionTitle>Help</SectionTitle>
         <Card className="overflow-hidden">
           <ListRow icon={CircleHelp} label="Help & Contact" onClick={() => setSheet("help")} />
@@ -66,6 +75,7 @@ export default function ProfilePage() {
         </div>
         <div className="h-[calc(92px+var(--home-inset))]" />
       </Overlap>
+      {service && <ServiceSheet service={service} onClose={() => setService(null)} />}
       {sheet && <ProfileSheets sheet={sheet} onClose={() => setSheet(null)} />}
     </div>
   );

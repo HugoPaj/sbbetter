@@ -24,7 +24,7 @@ export const fullName = `${USER.firstName} ${USER.lastName}`;
 /** Fallback position when geolocation is unavailable: EPFL, Ecublens. */
 export const DEFAULT_POSITION = { lat: 46.5191, lon: 6.5668 };
 
-/** Touch-timetable tiles. `id` is any value the API's `from`/`to` accept. */
+/** Suggested stops in the location picker. `id` is any value the API's `from`/`to` accept. */
 export const FAVOURITES: { id: string; line1: string; line2: string }[] = [
   { id: "Ecublens VD, EPFL", line1: "Ecublens VD", line2: "EPFL" },
   { id: "Lausanne", line1: "Lausanne", line2: "gare" },

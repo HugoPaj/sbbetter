@@ -31,17 +31,18 @@ pnpm build && pnpm start
 
 ```
 src/app/
-  plan/                 Timetable (map + search) and Touch timetable
+  plan/                 Timetable search + home (commute, Upcoming, recents, Other tickets sheet) and EasyRide
   connections/          Connection list  (?from&to&date&time… in the URL)
   connections/detail/   Single connection (&key=…)
   offers/               Offers + mock purchase → adds a ticket
-  trips/ easyride/ tickets/ shop/ profile/
+  tickets/              Tickets you show: SwissPass, valid tickets, running EasyRide, past purchases
+  profile/              Profile and settings sheets
   api/transport/        Proxy to the timetable API (swap upstream here)
 src/components/
   ui.tsx                Header, Segmented, Card, Sheet, Toggle, buttons…
   journey.tsx           ModeBadge, LineLabel, Timeline, ConnectionCard, Capacity
   journey-search-card   From/To/date + Advanced search sheet
-  plan/                 Map, location picker, departure board, touch timetable
+  plan/                 Map, location picker, departure board
 src/lib/                API client + types, URL journey state, formatting, store
 ```
 

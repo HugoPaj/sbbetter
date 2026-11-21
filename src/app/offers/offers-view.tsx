@@ -110,7 +110,7 @@ export function OffersView() {
   const productName = isReturn ? "Return Ticket" : covered && ticketCount === 0 && upgradeName ? upgradeName : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
 
-  /** Tickets are bought in the real SBB app (deep link); the journey goes to Trips at the same time. */
+  /** Tickets are bought in the real SBB app (deep link); the journey goes to Upcoming on Plan at the same time. */
   function purchase() {
     if (!conn) return;
     const reroute = rerouteFromSearchParams(new URLSearchParams(raw));
@@ -118,8 +118,8 @@ export function OffersView() {
     if (autoSave && tripId && !trips.some((t) => t.id === tripId)) {
       actions.toggleTrip({ id: tripId, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined });
     }
-    toast(autoSave ? "Journey saved to Trips. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
-    router.push("/trips");
+    toast(autoSave ? "Journey saved to Upcoming. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
+    router.push("/plan");
     // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
     const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;
     openInSbb(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });

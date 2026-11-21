@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PrimaryButton, Sheet, toast } from "./ui";
+import { OutlineButton, PrimaryButton, Sheet, toast } from "./ui";
 import { LocationPicker } from "./plan/location-picker";
 import { actions, type Commute } from "@/lib/store";
 
@@ -43,6 +43,18 @@ export function CommuteSetup({ initial, onClose }: { initial: Commute | null; on
           >
             Save commuter route
           </PrimaryButton>
+          {initial && (
+            <OutlineButton
+              className="mt-2.5"
+              onClick={() => {
+                actions.set({ commute: null });
+                onClose();
+                toast("Commuter route deleted.");
+              }}
+            >
+              Delete commuter route
+            </OutlineButton>
+          )}
         </div>
       </Sheet>
       {picking && (

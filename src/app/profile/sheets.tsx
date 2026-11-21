@@ -290,7 +290,7 @@ function Plates() {
         <input aria-label="Licence plate" value={plate} onChange={(e) => setPlate(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="e.g. VD 123456" className={INPUT} />
         <PrimaryButton onClick={add}>Add licence plate</PrimaryButton>
       </div>
-      <Note>Saved licence plates are used for P+Rail parking tickets in Shop &amp; Services.</Note>
+      <Note>Saved licence plates are used for P+Rail parking tickets in Tickets → Buy.</Note>
     </>
   );
 }
@@ -361,7 +361,7 @@ function Purchase() {
       <Heading>Purchase</Heading>
       <Card className="overflow-hidden">
         <SettingToggle id="purchase.quick" label="Quick purchase" hint="Buy with one tap, without the purchase overview" />
-        <SettingToggle id="purchase.autosave" fallback label="Save journey automatically" hint="Add the journey to Trips when you buy a ticket" />
+        <SettingToggle id="purchase.autosave" fallback label="Save journey automatically" hint="Add the journey to Upcoming on Plan when you buy a ticket" />
         <SettingToggle id="purchase.receipt" fallback label="Receipt by e-mail" hint={USER.email} />
         <SettingToggle id="purchase.biometric" label="Confirm with Face ID / fingerprint" />
       </Card>

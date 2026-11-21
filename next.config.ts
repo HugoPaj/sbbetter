@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Tabs folded into others: Trips, Shop and EasyRide into Plan (Upcoming, Other tickets).
+  async redirects() {
+    return [
+      { source: "/trips", destination: "/plan", permanent: false },
+      { source: "/shop", destination: "/plan", permanent: false },
+      { source: "/easyride", destination: "/plan", permanent: false },
+    ];
+  },
   partialPrefetching: true,
   turbopack: {
     rules: {

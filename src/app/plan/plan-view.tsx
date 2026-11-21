@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Briefcase, ChevronRight, House } from "lucide-react";
+import { ArrowLeftRight, Briefcase, ChevronRight, House, Tickets, TriangleAlert } from "lucide-react";
 import { Card, DESK_COL, Header, Overlap, Segmented, Skeleton, cn, toast } from "@/components/ui";
 import { BoardIcon, LongArrow, StopIcon, TargetIcon } from "@/components/icons";
 import { LocationPicker } from "@/components/plan/location-picker";
 import { DepartureBoard } from "@/components/plan/departure-board";
-import { TouchTimetable } from "@/components/plan/touch-timetable";
 import { CommuteSetup } from "@/components/commute";
 import { CommuteMemory } from "@/components/line-memory";
+import { EasyRideCard, EasyRideView, useRiding } from "@/components/easyride";
+import { OtherTicketsSheet } from "@/components/shop";
 import { FakeQr, TicketSheet } from "@/components/ticket";
 import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint, type Position } from "@/lib/use-position";
 import { commuteQuery, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
@@ -20,7 +21,7 @@ import { actions, useAppState, useStoreReady, type Commute, type SavedTrip, type
 import { formatDate, haversine, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 
-type View = "timetable" | "touch";
+type View = "timetable" | "easyride";
 
 export function PlanView() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export function PlanView() {
   const [from, setFrom] = useState<Endpoint>({ id: CURRENT_LOCATION, name: "Current location" });
   const [picking, setPicking] = useState<"from" | "to" | null>(null);
   const [board, setBoard] = useState<{ id: string; name: string } | null>(null);
+  const [others, setOthers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +64,7 @@ export function PlanView() {
           onChange={setView}
           options={[
             { value: "timetable", label: "Timetable" },
-            { value: "touch", label: "Touch timetable" },
+            { value: "easyride", label: "EasyRide" },
           ]}
         />
       </Header>
@@ -90,17 +92,18 @@ export function PlanView() {
               </div>
             </div>
             {error && <p className="mx-[3.5px] mt-1.75 rounded-xl bg-page/80 px-2.5 py-1.75 text-sm text-sbb-red">{error}</p>}
+            {/* Tickets for a journey come from its connection; this is for the ones without a route. */}
+            <button onClick={() => setOthers(true)} className="mt-2 flex w-full items-center gap-2.5 rounded-full px-[15px] py-1.5 text-left text-fg/70 transition-colors hover:text-fg">
+              <Tickets className="size-4.5 shrink-0" strokeWidth={1.25} />
+              <span className="min-w-0 flex-1 truncate text-[13.5px] font-light tracking-tight">Day passes, local tickets, parking</span>
+              <ChevronRight className="size-4 shrink-0" strokeWidth={1.5} />
+            </button>
           </Overlap>
 
           <Home pos={pos} onSearchTo={(to) => search(from, to)} />
         </>
       ) : (
-        <>
-          <TouchTimetable onSearch={search} />
-          {busy && <p className="mt-1.75 text-center text-muted">Searching…</p>}
-          {error && <p className="mt-1.75 text-center text-sbb-red">{error}</p>}
-          <div className="h-[calc(92px+var(--home-inset))]" />
-        </>
+        <EasyRideView />
       )}
 
       {picking && (
@@ -115,6 +118,7 @@ export function PlanView() {
           }}
         />
       )}
+      {others && <OtherTicketsSheet onClose={() => setOthers(false)} />}
       {board && <DepartureBoard stationId={board.id} stationName={board.name} onClose={() => setBoard(null)} />}
     </div>
   );
@@ -122,7 +126,7 @@ export function PlanView() {
 
 /** Everything below the search: commute, upcoming trips and valid tickets, recent destinations. */
 function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) => void }) {
-  const { commute, trips, tickets, recentStops } = useAppState();
+  const { commute, trips, tickets, recentStops, settings } = useAppState();
   const ready = useStoreReady();
   const now = useNow();
   const [setup, setSetup] = useState(false);
@@ -130,13 +134,21 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
   const at = useWhereAmI(commute, pos);
 
   const [openTicket, setOpenTicket] = useState<Ticket | null>(null);
-  const upcoming = now === null ? [] : upcomingItems(trips, tickets, now * 1000, 4);
+  const [all, setAll] = useState(false);
+  const riding = useRiding();
+  const upcomingAll = now === null ? [] : upcomingItems(trips, tickets, now * 1000);
+  const upcoming = all ? upcomingAll : upcomingAll.slice(0, UPCOMING_MAX);
   // The commute card already offers home and work.
   const commutePlace = (s: { id: string; name: string }) => !!commute && [commute.from, commute.to, commute.fromName, commute.toName].some((v) => v === s.id || v === s.name);
   const destinations = recentStops.filter((s) => !commutePlace(s)).slice(0, 6);
 
   return (
     <div className={cn("px-[8.5px]", DESK_COL)}>
+      {riding && (
+        <Section title="On your way">
+          <EasyRideCard />
+        </Section>
+      )}
       <Section title="Commuting" action={commute ? { label: "Edit", onClick: () => setSetup(true) } : undefined}>
         {/* Until hydration the saved commute is unknown: a placeholder, not the "set up" prompt. */}
         {!ready || (commute && at === undefined) ? <CommuteSkeleton /> : commute ? <CommuteCard commute={commute} at={at ?? null} /> : <CommutePrompt onClick={() => setSetup(true)} />}
@@ -154,10 +166,15 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
           <Card className="overflow-hidden">
             {upcoming.map((u) =>
               u.trip ? (
-                <UpcomingRow key={u.trip.id} trip={u.trip} ticket={u.ticket} onTicket={setOpenTicket} />
+                <UpcomingRow key={u.trip.id} trip={u.trip} ticket={u.ticket} status={TRIP_STATUS[String(settings[`sim:${u.trip.id}`])]} onTicket={setOpenTicket} />
               ) : (
                 u.ticket && <TicketRow key={u.ticket.id} ticket={u.ticket} onOpen={() => setOpenTicket(u.ticket!)} />
               ),
+            )}
+            {upcomingAll.length > UPCOMING_MAX && (
+              <button onClick={() => setAll((a) => !a)} className="w-full py-2.5 text-center text-[13.5px] font-light tracking-tight text-fg/70 transition-colors hover:bg-fg/5 hover:text-fg">
+                {all ? "Show fewer" : `Show all ${upcomingAll.length}`}
+              </button>
             )}
           </Card>
         </Section>
@@ -477,8 +494,17 @@ function CommutePrompt({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Rows shown before "Show all". */
+const UPCOMING_MAX = 4;
+
+/** One-line verdict for a saved trip with a (simulated) disruption, keyed by its `sim:<trip id>` setting. */
+const TRIP_STATUS: Record<string, string> = {
+  missed: "You’ll miss your change. Tap to see what to do.",
+  cancelled: "Your train is cancelled. Tap to see what to do.",
+};
+
 /** A saved trip; when a valid ticket covers it, the ticket's code sits beside it, one tap from full screen. */
-function UpcomingRow({ trip: t, ticket, onTicket }: { trip: SavedTrip; ticket?: Ticket; onTicket: (t: Ticket) => void }) {
+function UpcomingRow({ trip: t, ticket, status, onTicket }: { trip: SavedTrip; ticket?: Ticket; status?: string; onTicket: (t: Ticket) => void }) {
   return (
     <div className="flex items-center border-b border-line last:border-b-0">
       <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className={cn(ROW, "min-w-0 flex-1 border-b-0")}>
@@ -491,6 +517,12 @@ function UpcomingRow({ trip: t, ticket, onTicket }: { trip: SavedTrip; ticket?: 
           <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
             Arr. {formatTime(t.arrival)} · {t.summary}
           </p>
+          {status && (
+            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] leading-tight text-sbb-red">
+              <TriangleAlert className="size-3.5 shrink-0" strokeWidth={2} />
+              {status}
+            </p>
+          )}
         </div>
         {!ticket && <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />}
       </Link>
@@ -527,7 +559,7 @@ type Upcoming = { at: string; trip?: SavedTrip; ticket?: Ticket };
  * Saved trips not yet over and tickets still valid, soonest first. A ticket for the same route
  * that is valid when a trip leaves goes with that trip rather than on a row of its own.
  */
-function upcomingItems(trips: SavedTrip[], tickets: Ticket[], nowMs: number, max: number): Upcoming[] {
+function upcomingItems(trips: SavedTrip[], tickets: Ticket[], nowMs: number): Upcoming[] {
   const valid = tickets.filter((t) => Date.parse(t.validTo) >= nowMs);
   const used = new Set<string>();
   const items: Upcoming[] = trips
@@ -541,5 +573,5 @@ function upcomingItems(trips: SavedTrip[], tickets: Ticket[], nowMs: number, max
       return { at: trip.departure, trip, ticket };
     });
   for (const k of valid) if (!used.has(k.id)) items.push({ at: k.validFrom, ticket: k });
-  return items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(0, max);
+  return items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }

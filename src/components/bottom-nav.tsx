@@ -2,20 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound, Monitor, Moon, Store, Sun, ToggleLeft } from "lucide-react";
+import { CircleUserRound, Monitor, Moon, Sun } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { PlanIcon, QrIcon, TripsIcon } from "./icons";
+import { PlanIcon, QrIcon } from "./icons";
 import { SbbLogo, cn } from "./ui";
 import { THEME_OPTIONS, setTheme, useTheme, useThemeChoice } from "@/lib/theme";
 
 type Tab = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement> & { strokeWidth?: number }>; match: string[] };
 
 export const TABS: Tab[] = [
+  // Plan also holds saved trips (Upcoming) and the commute; Tickets also holds buying (Buy) and EasyRide.
   { href: "/plan", label: "Plan", icon: PlanIcon, match: ["/plan", "/connections", "/offers"] },
-  { href: "/trips", label: "Trips", icon: TripsIcon, match: ["/trips"] },
-  { href: "/easyride", label: "EasyRide", icon: ToggleLeft, match: ["/easyride"] },
-  { href: "/tickets", label: "Tickets & Travelcards", icon: QrIcon, match: ["/tickets"] },
-  { href: "/shop", label: "Shop & Services", icon: Store, match: ["/shop"] },
+  { href: "/tickets", label: "Tickets", icon: QrIcon, match: ["/tickets"] },
   { href: "/profile", label: "Profile", icon: CircleUserRound, match: ["/profile"] },
 ];
 

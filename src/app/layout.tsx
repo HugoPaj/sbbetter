@@ -39,8 +39,8 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"
  *  - --app-h: the screen height. 100dvh, 100% and the fixed-position frame can all end ~34pt
  *    above the home indicator, which leaves a black bar (globals.css stretches html/body to it).
  *  - --safe-top: env(safe-area-inset-top) can read 0 (or arrive late) while the status bar
- *    still covers the page, so never go below the status bar height (59pt Dynamic Island,
- *    47pt notch, 20pt home button).
+ *    still covers the page, so never go below the status bar height (62pt on 402pt+ wide Dynamic
+ *    Island phones, 59pt on older Dynamic Island ones, 47pt notch, 20pt home button).
  * Re-runs after load/resize because the first values iOS reports while parsing can be wrong.
  * On every iPhone (browser or installed) it also keeps the document scrolled to the top: see pin().
  * Add `?vp` to the URL to show the measured values on the device (`?vp=0` hides them again).
@@ -77,7 +77,7 @@ function fix(){
   var k=vw/w,portrait=!matchMedia("(orientation: landscape)").matches;
   info={standalone:n.standalone,app:app,screen:w+"x"+h,inner:innerWidth+"x"+innerHeight,client:d.clientWidth+"x"+d.clientHeight,dvh:dvh,envTop:top,envBottom:bot,k:k.toFixed(3),portrait:portrait};
   if(ios&&app&&portrait&&w>0){
-    var full=Math.round(h*k),bar=h/w>2?(h>=852?59:47):20;
+    var full=Math.round(h*k),bar=h/w>2?(w>=402?62:h>=852?59:47):20;
     d.style.setProperty("--app-h",Math.max(full,Math.round(dvh))+"px");
     d.style.setProperty("--safe-top",Math.round(Math.max(top,bar*k))+"px");
     d.dataset.iosApp="";

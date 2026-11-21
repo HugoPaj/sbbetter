@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Accessibility, Baby, BadgeSwissFranc, Bike, CircleUserRound, FileText, Gift, Luggage, Pencil, Tickets, Users, UsersRound } from "lucide-react";
+import { Accessibility, Baby, BadgeSwissFranc, Bike, FileText, Gift, Luggage, Pencil, Tickets, Users, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { Card, DESK_COL, Header, InfoLine, ListRow, OutlineButton, Overlap, PillLink, PillToggle, PrimaryButton, Radio, Segmented, Sheet, cn, toast } from "@/components/ui";
+import { Card, InfoLine, OutlineButton, PillLink, PillToggle, PrimaryButton, Radio, Sheet, toast } from "@/components/ui";
 import { LocationPicker } from "@/components/plan/location-picker";
 import { CURRENT_LOCATION } from "@/lib/use-position";
 import { actions, useAppState, useSetting, type Ticket } from "@/lib/store";
@@ -14,6 +14,7 @@ import { fullName } from "@/lib/mock-data";
 import { usePasses } from "@/lib/travelcards";
 import { passCovering, passCoveringRestOfDay } from "@/lib/passes";
 import { usePosition } from "@/lib/use-position";
+import { nearbyStations } from "@/lib/transport";
 
 /** MOCK catalogue: prices and texts are illustrative, not official fares. */
 type Product = {
@@ -71,85 +72,82 @@ const SERVICE_INFO: Record<string, { text: string; action: string; href?: string
   },
 };
 
-const SERVICES = [
+/** Services that aren't tickets (Profile); receipts and refunds concern tickets you have, so they live on Tickets (TICKET_SERVICES). */
+export const SERVICES = [
   { label: "Luggage", icon: Luggage },
   { label: "Gift cards", icon: Gift },
   { label: "Mobility assistance", icon: Accessibility },
-  { label: "Refunds", icon: BadgeSwissFranc },
-  { label: "Receipts", icon: FileText },
 ];
 
-export default function ShopPage() {
-  const [tab, setTab] = useState<"quick" | "services">("quick");
-  const [dep, setDep] = useSetting<string>("shop.dep", "Ecublens VD, EPFL");
+export const TICKET_SERVICES = [
+  { label: "Receipts", icon: FileText },
+  { label: "Refunds", icon: BadgeSwissFranc },
+];
+
+/**
+ * Tickets without a fixed route, opened from Plan ("Other tickets"): tickets for a journey are bought
+ * from its connection, so this holds only what a search can't sell: local tickets around a stop,
+ * day passes and P+Rail parking. (Not choosing at all is EasyRide, in Plan.) A purchase opens Tickets.
+ */
+export function OtherTicketsSheet({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  // Unset until chosen: then the stop nearest to the traveller, like the Plan search.
+  const [chosenDep, setDep] = useSetting<string>("shop.dep", "");
+  const nearest = useNearestStop();
+  const dep = chosenDep || nearest || "Ecublens VD, EPFL";
   const [prail, setPrail] = useSetting<string>("shop.prail", PRAIL[0]);
   const [product, setProduct] = useState<{ p: Product; place: string } | null>(null);
   const [edit, setEdit] = useState<"dep" | "prail" | null>(null);
-  const [service, setService] = useState<string | null>(null);
+  const [allPasses, setAllPasses] = useState(false);
+
   return (
-    <div>
-      <Header title="Shop & Services" extend>
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: "quick", label: "Quick access" },
-            { value: "services", label: "Services" },
-          ]}
-        />
-      </Header>
-      <Overlap className={cn("space-y-4.25", DESK_COL)}>
-        <Card className="flex h-[52px] items-center gap-1.5 px-[15px]">
-          <CircleUserRound className="-ml-0.5 size-[35px] shrink-0" strokeWidth={0.9} />
-          <span className="truncate text-[16px] font-bold">{fullName}</span>
-        </Card>
-
-        {tab === "quick" ? (
-          <>
-            <Group label="Dep:" value={dep} onEdit={() => setEdit("dep")}>
-              {LOCAL.map((p) => (
-                <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: dep })} />
-              ))}
-            </Group>
-            <Group label="P+Rail:" value={prail} onEdit={() => setEdit("prail")}>
-              {PARKING.map((p) => (
-                <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: prail })} />
-              ))}
-            </Group>
-            <div>
-              <h2 className="-mt-[4.5px] px-[15px] pb-1.5 text-[16px] font-bold">Products</h2>
-              <Card className="space-y-[8.5px] px-[15px] pt-3 pb-[15px]">
-                <div className="flex items-center justify-between pb-1.25">
-                  <p className="text-[16px] font-bold">Day Passes Switzerland</p>
-                  <span className="flex size-5 items-center justify-center rounded-full bg-[#cfcfcf] text-[13px] font-bold text-black">{DAY_PASSES.length}</span>
-                </div>
-                {DAY_PASSES.map((p) => (
-                  <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: "Switzerland" })} />
-                ))}
-              </Card>
-            </div>
-          </>
-        ) : (
-          <Card className="overflow-hidden">
-            {SERVICES.map((s) => (
-              <ListRow key={s.label} icon={s.icon} label={s.label} chevron onClick={() => setService(s.label)} />
+    <>
+      <Sheet title="Other tickets" onClose={onClose} full>
+        <p className="px-1 pb-3.5 text-[13.5px] leading-snug font-light tracking-tight text-fg/70">Valid for a time and an area rather than one connection. For a trip from A to B, search it and pick a fare. To not choose at all, use EasyRide.</p>
+        <div className="space-y-[8.5px]">
+          <Group label="Around" value={dep} onEdit={() => setEdit("dep")}>
+            {LOCAL.map((p) => (
+              <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: dep })} />
             ))}
+          </Group>
+          <Card className="space-y-[8.5px] px-[15px] pt-3 pb-[15px]">
+            <p className="pb-1.25 text-[16px] font-bold">All of Switzerland, for a day</p>
+            {(allPasses ? DAY_PASSES : DAY_PASSES.slice(0, 3)).map((p) => (
+              <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: "Switzerland" })} />
+            ))}
+            <button onClick={() => setAllPasses((a) => !a)} className="w-full pt-1 text-center text-[13.5px] font-light tracking-tight text-fg/70 hover:text-fg">
+              {allPasses ? "Show fewer" : `All ${DAY_PASSES.length} day passes`}
+            </button>
           </Card>
-        )}
-        <div className="h-[calc(78px+var(--home-inset))]" />
-      </Overlap>
+          <Group label="Parking at" value={prail} onEdit={() => setEdit("prail")}>
+            {PARKING.map((p) => (
+              <PillLink key={p.label} icon={p.icon} label={p.label} onClick={() => setProduct({ p, place: prail })} />
+            ))}
+          </Group>
+        </div>
+      </Sheet>
 
-      {product && <ProductSheet product={product.p} place={product.place} onClose={() => setProduct(null)} />}
+      {product && (
+        <ProductSheet
+          product={product.p}
+          place={product.place}
+          onClose={() => setProduct(null)}
+          onBought={() => {
+            setProduct(null);
+            onClose();
+            router.push("/tickets");
+          }}
+        />
+      )}
       {edit === "dep" && (
         <LocationPicker
           title="Departure stop"
           onClose={() => setEdit(null)}
           onPick={(e) => {
             setEdit(null);
-            if (e.id === CURRENT_LOCATION) return toast("Demo: nearest stop not resolved here. Please pick a stop.");
+            if (e.id === CURRENT_LOCATION) return setDep("");
             setDep(e.name);
           }}
-          allowCurrent={false}
         />
       )}
       {edit === "prail" && (
@@ -170,13 +168,31 @@ export default function ShopPage() {
           </Card>
         </Sheet>
       )}
-      {service && <ServiceSheet service={service} onClose={() => setService(null)} />}
-    </div>
+    </>
   );
 }
 
-function ProductSheet({ product, place, onClose }: { product: Product; place: string; onClose: () => void }) {
-  const router = useRouter();
+/** Name of the stop nearest to the traveller's position, once known. */
+function useNearestStop(): string | null {
+  const pos = usePosition();
+  const [found, setFound] = useState<{ at: string; name: string | null } | null>(null);
+  // Rounded so small GPS jitter doesn't refetch.
+  const at = `${pos.lat.toFixed(3)},${pos.lon.toFixed(3)}`;
+  useEffect(() => {
+    if (!pos.settled) return;
+    let live = true;
+    nearbyStations(pos.lat, pos.lon)
+      .then((s) => live && setFound({ at, name: s[0]?.name ?? null }))
+      .catch(() => live && setFound({ at, name: null }));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `at` covers the position.
+  }, [at, pos.settled]);
+  return found?.at === at ? found.name : null;
+}
+
+function ProductSheet({ product, place, onClose, onBought }: { product: Product; place: string; onClose: () => void; onBought: () => void }) {
   const passes = usePasses();
   const { plates } = useAppState();
   const [klass, setKlass] = useState<"2" | "1">("2");
@@ -213,7 +229,7 @@ function ProductSheet({ product, place, onClose }: { product: Product; place: st
     });
     if (parking && !plates.includes(plate.trim().toUpperCase())) actions.set({ plates: [...plates, plate.trim().toUpperCase()] });
     toast(`${product.label} purchased (demo, nothing was charged).`);
-    router.push("/tickets");
+    onBought();
   }
 
   return (
@@ -284,7 +300,7 @@ function download(name: string, text: string, type = "text/plain") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function ServiceSheet({ service, onClose }: { service: string; onClose: () => void }) {
+export function ServiceSheet({ service, onClose }: { service: string; onClose: () => void }) {
   const { tickets } = useAppState();
   const [code, setCode] = useState("");
   const info = SERVICE_INFO[service];

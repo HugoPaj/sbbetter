@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { DEFAULT_TRAVELCARDS, FAVOURITES, seedExpiredTickets } from "./mock-data";
+import { DEFAULT_TRAVELCARDS, seedExpiredTickets } from "./mock-data";
 import type { TravelcardSelection } from "./travelcards";
 import type { JourneyQuery } from "./journey-query";
 
@@ -33,7 +33,6 @@ export type SavedTrip = {
   params?: Record<string, string>;
 };
 
-export type Favourite = { id: string; line1: string; line2: string };
 /** A stop picked in a search, offered again in the next one. */
 export type RecentStop = { id: string; name: string };
 export type CoPassenger = { id: string; name: string; birthDate: string; reduction: string };
@@ -43,8 +42,6 @@ export type SettingValue = string | number | boolean;
 type State = {
   tickets: Ticket[];
   trips: SavedTrip[];
-  /** Touch-timetable tiles (editable). */
-  favourites: Favourite[];
   coPassengers: CoPassenger[];
   plates: string[];
   commute: Commute | null;
@@ -56,7 +53,7 @@ type State = {
   settings: Record<string, SettingValue>;
 };
 
-const EXTRA = { favourites: FAVOURITES as Favourite[], coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, recentStops: [] as RecentStop[], travelcards: DEFAULT_TRAVELCARDS, settings: {} as Record<string, SettingValue> };
+const EXTRA = { coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, recentStops: [] as RecentStop[], travelcards: DEFAULT_TRAVELCARDS, settings: {} as Record<string, SettingValue> };
 const fresh = (): State => ({ tickets: seedExpiredTickets(), trips: [], ...EXTRA });
 
 const KEY = "sbb-proto-state-v1";

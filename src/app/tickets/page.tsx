@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { ChevronRight } from "lucide-react";
-import { Card, DESK_COL, Header, InfoLine, OutlineButton, Overlap, Segmented, Sheet, cn, toast } from "@/components/ui";
+import { ChevronRight, History } from "lucide-react";
+import { Card, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Sheet, cn, toast } from "@/components/ui";
 import { LongArrow, PhoneTicketIcon, QrOffIcon } from "@/components/icons";
 import { FakeQr, TicketSheet } from "@/components/ticket";
+import { EasyRideCard } from "@/components/easyride";
+import { ServiceSheet, TICKET_SERVICES } from "@/components/shop";
 import { USER } from "@/lib/mock-data";
 import { travelcardNames, useCatalog, useTravelcards } from "@/lib/travelcards";
 import { useAppState, type Ticket } from "@/lib/store";
@@ -20,7 +22,8 @@ const TRAVELCARDS: Record<string, { validity: string; text: string }> = {
 const subscribeNoop = () => () => {};
 
 export default function TicketsPage() {
-  const [tab, setTab] = useState<"valid" | "expired">("valid");
+  const [showExpired, setShowExpired] = useState(false);
+  const [service, setService] = useState<string | null>(null);
   const { tickets } = useAppState();
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Ticket | null>(null);
@@ -35,18 +38,9 @@ export default function TicketsPage() {
 
   return (
     <div>
-      <Header title="Tickets & Travelcards" extend={tab === "valid"}>
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: "valid", label: "Valid" },
-            { value: "expired", label: "Expired" },
-          ]}
-        />
-      </Header>
+      {/* What you show: SwissPass, valid tickets, a running EasyRide ride. Buying starts on Plan. */}
+      <Header title="Tickets" extend />
 
-      {tab === "valid" ? (
         <Overlap className="lg:mx-auto lg:grid lg:max-w-[1040px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
           {/* SwissPass card (desktop: stays in view on the left, tickets on the right) */}
           <Card className="overflow-hidden lg:sticky lg:top-[88px]">
@@ -103,10 +97,14 @@ export default function TicketsPage() {
 
           <div className="lg:min-w-0">
           <div className="mt-[38.5px] space-y-[8.5px] lg:mt-0">
+            <EasyRideCard />
             {valid.length === 0 ? (
               <div className="rounded-[19px] border border-fg/35 bg-gradient-to-b from-[#1a1a1a] to-[#0c0c0c] light:from-white light:to-[#f6f6f6] px-5 pt-4.25 pb-3 text-center">
                 <PhoneTicketIcon className="mx-auto h-[78px] w-[62px]" />
                 <p className="mt-1.5 text-[14px] font-light tracking-tight text-fg/75">You do not currently have a valid ticket.</p>
+                <div className="mx-auto mt-3 mb-1 max-w-[240px]">
+                  <PrimaryButton href="/plan">Find a ticket</PrimaryButton>
+                </div>
               </div>
             ) : (
               valid.map((t) => <TicketCard key={t.id} ticket={t} valid onOpen={() => setOpen(t)} />)
@@ -122,20 +120,26 @@ export default function TicketsPage() {
               </button>
             ))}
           </div>
+          <h2 className="px-[15px] pt-5 pb-1.75 text-[13.5px] font-light tracking-tight">Past</h2>
+          <Card className="overflow-hidden">
+            <ListRow icon={History} label="Expired tickets" chevron trailing={<span className="text-[13.5px] font-light text-fg/70">{expired.length}</span>} onClick={() => setShowExpired(true)} />
+            {TICKET_SERVICES.map((s) => (
+              <ListRow key={s.label} icon={s.icon} label={s.label} chevron onClick={() => setService(s.label)} />
+            ))}
+          </Card>
           <div className="h-[calc(92px+var(--home-inset))]" />
           </div>
         </Overlap>
-      ) : (
-        <div className={cn("px-[8.5px]", DESK_COL)}>
-          <h2 className="px-[15px] pt-[28.5px] pb-3 text-[13.5px] font-light tracking-tight">Expired tickets</h2>
+
+      {service && <ServiceSheet service={service} onClose={() => setService(null)} />}
+      {showExpired && (
+        <Sheet title="Expired tickets" onClose={() => setShowExpired(false)} full>
           <div className="space-y-[8.5px]">
-            {expired.length === 0 && <p className="px-[15px] text-[14.5px] font-light text-muted">No expired tickets.</p>}
             {expired.map((t) => (
               <TicketCard key={t.id} ticket={t} onOpen={() => setOpen(t)} />
             ))}
           </div>
-          <div className="h-[calc(92px+var(--home-inset))]" />
-        </div>
+        </Sheet>
       )}
 
       {open && <TicketSheet ticket={open} valid={new Date(open.validTo).getTime() >= now} onClose={() => setOpen(null)} />}
