@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/*
+ * SBB-like dark theme tokens. The app currently ships dark mode only
+ * (matches the reference screenshots).
+ */
+@theme {
+  --color-sbb-red: #eb0000;
+  --color-sbb-red-dark: #c60018;
+  --color-sbb-red-deep: #a20013;
+  --color-sbb-blue: #2d327d;
+  --color-surface: #232323;
+  --color-surface-2: #3b3b3b;
+  --color-surface-3: #4a4a4a;
+  --color-line: #3d3d3d;
+  --color-muted: #a8a8a8;
+  --color-dim: #6f6f6f;
+  --color-ok: #3bb273;
+  --color-warn: #f5a623;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+  /*
+   * Space under the tab bar for the iPhone home indicator. The native app always
+   * reserves ~34pt; in a browser tab env() is 0, so keep at least that.
+   */
+  --home-inset: max(env(safe-area-inset-bottom), 34px);
+}
+
+html,
+body {
+  background: #0d0d0d;
+  color: #fff;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbars inside the phone frame but keep scrolling. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* MapLibre: collapsed "i" attribution button, on-theme and clear of the tab bar. */
+.maplibregl-map .maplibregl-ctrl-bottom-right {
+  bottom: calc(var(--home-inset) + 94px);
+  right: 14px;
+}
+.maplibregl-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+  margin: 0;
+  min-height: 31px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  background: #141414;
+  color: #bbb;
+  font-size: 10px;
+  line-height: 18px;
+}
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  padding: 6px 34px 6px 10px;
+}
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  min-width: 31px;
+  padding: 0;
+}
+.maplibregl-map .maplibregl-ctrl-attrib a {
+  color: #ddd;
+}
+.maplibregl-map .maplibregl-ctrl-attrib-button {
+  top: 3px;
+  right: 3px;
+  background-color: transparent;
+  filter: invert(1);
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheet-up {
+  animation: sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 160ms ease-out;
+}
+
+/* Maps inside sheets (route / walk): attribution sits in the map's own corner. */
+.route-map .maplibregl-map .maplibregl-ctrl-bottom-right {
+  bottom: 8px;
+  right: 8px;
+}

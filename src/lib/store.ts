@@ -1,0 +1,125 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+import { FAVOURITES, seedExpiredTickets } from "./mock-data";
+import type { JourneyQuery } from "./journey-query";
+
+/**
+ * Tiny localStorage-backed store for prototype state (purchased tickets,
+ * saved trips). Swap for a real backend when needed.
+ */
+
+export type Ticket = {
+  id: string;
+  product: string;
+  from: string;
+  to: string;
+  via: string;
+  validFrom: string; // ISO
+  validTo: string; // ISO
+  price: number;
+  travelClass: 1 | 2;
+};
+
+export type SavedTrip = {
+  id: string;
+  query: JourneyQuery;
+  index: number;
+  departure: string; // ISO
+  arrival: string; // ISO
+  summary: string; // e.g. "B 701 → RE 33"
+};
+
+export type Favourite = { id: string; line1: string; line2: string };
+export type CoPassenger = { id: string; name: string; birthDate: string; reduction: string };
+export type Commute = { from: string; fromName: string; to: string; toName: string; outTime: string; backTime: string };
+export type SettingValue = string | number | boolean;
+
+type State = {
+  tickets: Ticket[];
+  trips: SavedTrip[];
+  /** Touch-timetable tiles (editable). */
+  favourites: Favourite[];
+  coPassengers: CoPassenger[];
+  plates: string[];
+  commute: Commute | null;
+  /** Free-form persisted switches / choices (profile settings, shop stop, …). */
+  settings: Record<string, SettingValue>;
+};
+
+const EXTRA = { favourites: FAVOURITES as Favourite[], coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, settings: {} as Record<string, SettingValue> };
+const fresh = (): State => ({ tickets: seedExpiredTickets(), trips: [], ...EXTRA });
+
+const KEY = "sbb-proto-state-v1";
+const listeners = new Set<() => void>();
+const EMPTY: State = { tickets: [], trips: [], ...EXTRA };
+let state: State | null = null;
+
+function load(): State {
+  if (state) return state;
+  if (typeof window === "undefined") return EMPTY;
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    // Older saved states lack the newer fields: fill them in.
+    state = raw ? { ...fresh(), ...(JSON.parse(raw) as Partial<State>) } : fresh();
+  } catch {
+    state = fresh();
+  }
+  return state;
+}
+
+function save(next: State) {
+  state = next;
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    /* storage unavailable: keep in memory */
+  }
+  listeners.forEach((l) => l());
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+export function useAppState(): State {
+  return useSyncExternalStore(subscribe, load, () => EMPTY);
+}
+
+export const actions = {
+  addTicket(t: Ticket) {
+    const s = load();
+    save({ ...s, tickets: [t, ...s.tickets] });
+  },
+  toggleTrip(trip: SavedTrip) {
+    const s = load();
+    const exists = s.trips.some((t) => t.id === trip.id);
+    save({ ...s, trips: exists ? s.trips.filter((t) => t.id !== trip.id) : [trip, ...s.trips] });
+  },
+  removeTrip(id: string) {
+    const s = load();
+    save({ ...s, trips: s.trips.filter((t) => t.id !== id) });
+  },
+  removeTicket(id: string) {
+    const s = load();
+    save({ ...s, tickets: s.tickets.filter((t) => t.id !== id) });
+  },
+  set(patch: Partial<Omit<State, "settings">>) {
+    save({ ...load(), ...patch });
+  },
+  setSetting(key: string, value: SettingValue) {
+    const s = load();
+    save({ ...s, settings: { ...s.settings, [key]: value } });
+  },
+  reset() {
+    save(fresh());
+  },
+};
+
+/** One persisted setting with a default. */
+export function useSetting<T extends SettingValue>(key: string, fallback: T): [T, (v: T) => void] {
+  const { settings } = useAppState();
+  const v = settings[key];
+  return [(v === undefined ? fallback : v) as T, (next: T) => actions.setSetting(key, next)];
+}
