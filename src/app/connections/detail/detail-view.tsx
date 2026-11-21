@@ -9,11 +9,12 @@ import { RouteMap, type RouteLine, type RoutePoint } from "@/components/plan/rou
 import { LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
 import { Capacity, LineLabel, ModeBadge, Timeline, WalkBadge } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref } from "@/lib/journey-query";
-import { TONE_TEXT, VerdictCard } from "@/components/verdict-card";
+import { VerdictCard } from "@/components/verdict-card";
 import { connectionKey, fetchConnection } from "@/lib/connection-key";
-import { SCENARIOS, assess, type Scenario, type Tone, type Verdict } from "@/lib/disruption";
+import { SCENARIOS, assess, type Scenario, type Verdict } from "@/lib/disruption";
 import { formatDate, formatMinutes, formatTime, parseApiDuration, zurichDateTime } from "@/lib/format";
-import { estimateFare } from "@/lib/pricing";
+import { priceConnection } from "@/lib/pricing";
+import { useNovaFares } from "@/lib/fares";
 import { USER } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Checkpoint, Connection, Disruption, Section } from "@/lib/transport";
@@ -118,12 +119,13 @@ export function DetailView() {
     return () => ctrl.abort();
   }, [conn, raw, scenario, assessId]);
 
+  const fareOf = useNovaFares(conn ? [conn] : null, USER.halfFare);
   if (!query) return <ErrorBox message="No journey selected." />;
 
   const verdict = scenario && assessed.id === assessId ? assessed.verdict : null;
   const checking = !!scenario && !!conn && assessed.id !== assessId;
   const saved = trips.some((t) => t.id === tripId);
-  const price = conn ? estimateFare(conn, { halfFare: USER.halfFare }).secondClass : null;
+  const price = conn ? (priceConnection(conn, fareOf(conn), { halfFare: USER.halfFare })?.secondClass ?? null) : null;
   const fromLabel = query.fromName === "Current location" ? "Your chosen location" : query.fromName;
   const walk = conn?.accessWalk?.minutes ?? query.walkMinutes;
   const totalMin = conn ? parseApiDuration(conn.duration) + (walk ?? 0) : 0;
@@ -256,6 +258,7 @@ export function DetailView() {
           {verdict && (
             <VerdictCard
               verdict={verdict}
+              altHref={verdict.alternative && journeyHref("/connections/detail", verdict.alternative.query, { key: connectionKey(verdict.alternative.connection) })}
               onAccept={acceptAlternative}
               onOthers={() => verdict.alternative && router.push(journeyHref("/connections", verdict.alternative.query))}
             />
@@ -297,7 +300,7 @@ export function DetailView() {
       )}
       <div className="h-[calc(177px+var(--home-inset))]" />
 
-      {conn && price !== null && (
+      {conn && price !== null && !verdict?.alternative && (
         <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px]">
           <PrimaryButton href={journeyHref("/offers", query, { key: key ?? "" })}>
             Tickets from&nbsp;<b className="font-bold">CHF {price.toFixed(2)}</b>
@@ -429,7 +432,7 @@ function WalkRow({ minutes, metres, onOpen }: { minutes: number; metres?: number
   );
 }
 
-function SectionCard({ section, first, last, onStop, note }: { section: Section; first: boolean; last: boolean; onStop: (s: Stop) => void; note?: { text: string; tone: Tone } }) {
+function SectionCard({ section, first, last, onStop, note }: { section: Section; first: boolean; last: boolean; onStop: (s: Stop) => void; note?: string }) {
   const j = section.journey!;
   const [open, setOpen] = useState(false);
   const stops = j.passList.slice(1, -1);
@@ -466,7 +469,7 @@ function SectionCard({ section, first, last, onStop, note }: { section: Section;
             <Capacity first={j.capacity1st} second={j.capacity2nd} className="ml-auto" />
           </div>
           <p className="mt-1.5 text-[14.5px] leading-snug font-light">Direction {j.to}</p>
-          {note && <p className={cn("mt-1 text-[13px] font-bold", TONE_TEXT[note.tone])}>{note.text}</p>}
+          {note && <p className="mt-1 text-[12px] text-sbb-red">{note}</p>}
           {stops.length > 0 && (
             <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="mt-1 flex items-center gap-[3.5px] text-[13px] font-light text-muted">
               {stops.length} stop{stops.length > 1 ? "s" : ""}

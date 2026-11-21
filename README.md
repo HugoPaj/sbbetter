@@ -21,7 +21,7 @@ pnpm build && pnpm start
 | Real-time delays, platforms, occupancy, disruptions | **Live** via OJP (delays/occupancy also via opendata) |
 | "Current location" routing | Browser geolocation (EPFL fallback). OJP routes from the exact coordinate incl. the walk to the first stop; without OJP it snaps to the nearest stop |
 | Map | MapLibre + CARTO dark vector tiles |
-| Prices / offers | **Mock** estimate by distance — `src/lib/pricing.ts` |
+| Prices / offers | **Live** NOVA prices (cheapest ticket, e.g. Supersaver, full fare or Half Fare) via the OJP Fare API when `OJP_FARE_API_KEY` is set — `src/lib/server/ojp-fare.ts`, `src/lib/fares.ts`. Otherwise a **mock** estimate by distance — `src/lib/pricing.ts`. Class upgrades and City add-ons are always modelled |
 | User, travelcards, favourites | **Mock** — `src/lib/mock-data.ts` |
 | Disruption verdict card | **Simulated** disruption (Connection → ⋮ → "Simulate a disruption"), **live** recommended alternative — `src/lib/disruption.ts` |
 | Purchased tickets, saved trips | `localStorage` — `src/lib/store.ts` (Profile → "Reset demo data") |
@@ -62,5 +62,17 @@ handler decides the upstream:
 The `X-Data-Source: ojp | opendata` response header shows which one answered. To get a key, sign up at
 [api-manager.opentransportdata.swiss](https://api-manager.opentransportdata.swiss), subscribe to
 the OJP 2.0 API and put the token in `.env.local`. The free tier allows 50 req/min and 20k/day.
+
+### Fares (OJP Fare / NOVA)
+
+Every OJP connection carries a `fareRef` that points to its raw `<Trip>` XML, held in server memory for
+30 minutes. The client calls `/api/transport/fares?refs=…&hta=1`. The server swaps platform refs for
+their stop place, drops real-time fields and sends an `OJPFareRequest` to
+`https://api.opentransportdata.swiss/ojpfare/`. From the result it takes the cheapest product per
+class. Gotchas:
+- The `Traveller` must contain an `<EntitlementProducts>` element. Leave it empty for full fare, or
+  put `HTA` in it for Half Fare. Without it the service returns a 500.
+- OJP Fare is a separate API product with its own subscription and key (`OJP_FARE_API_KEY`).
+- It is an integration test system that prices only future trips, and only within Switzerland.
 
 Note: in the opendata shape `coordinate.x` is **latitude** and `y` is **longitude**.

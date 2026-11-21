@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Trash2, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, Header, OutlineButton, PrimaryButton, Segmented, Sheet, toast } from "@/components/ui";
 import { LocationPicker } from "@/components/plan/location-picker";
@@ -141,17 +141,21 @@ export default function TripsPage() {
   );
 }
 
-const TRIP_STATUS: Record<string, { text: string; tone: string }> = {
-  delay: { text: "Small delay. Nothing to do.", tone: "text-ok" },
-  missed: { text: "Change of plan. Tap to see what to do.", tone: "text-warn" },
-  cancelled: { text: "Act now. Your train is cancelled.", tone: "text-sbb-red" },
+const TRIP_STATUS: Record<string, string> = {
+  missed: "You’ll miss your change. Tap to see what to do.",
+  cancelled: "Your train is cancelled. Tap to see what to do.",
 };
 
 /** One-line verdict for a saved trip with a (simulated) disruption. */
 function TripStatus({ scenario }: { scenario: unknown }) {
   const status = TRIP_STATUS[String(scenario)];
   if (!status) return null;
-  return <p className={`mt-1 text-[13px] font-bold ${status.tone}`}>{status.text}</p>;
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-[13px] leading-tight text-sbb-red">
+      <TriangleAlert className="size-3.5 shrink-0" strokeWidth={2} />
+      {status}
+    </p>
+  );
 }
 
 function CommuteSetup({ initial, onClose }: { initial: Commute | null; onClose: () => void }) {

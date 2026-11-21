@@ -7,13 +7,17 @@ import { Card, Checkbox, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, R
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
 import { fetchConnection } from "@/lib/connection-key";
-import { estimateFare, cityOf } from "@/lib/pricing";
+import { priceConnection, cityOf } from "@/lib/pricing";
+import { useNovaFares } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Connection } from "@/lib/transport";
 
 type Offer = "regular" | "supersaver" | "p2p";
+
+/** Wall-clock time for event handlers (kept out of render for the React Compiler). */
+const nowMs = () => Date.now();
 
 export function OffersView() {
   const router = useRouter();
@@ -47,9 +51,10 @@ export function OffersView() {
     return () => ctrl.abort();
   }, [raw, key]);
 
+  const fareOf = useNovaFares(conn ? [conn] : null, USER.halfFare);
   if (!query) return <ErrorBox message="No journey selected." />;
 
-  const fare = conn ? estimateFare(conn, { halfFare: USER.halfFare, returnTrip: trip === "return" }) : null;
+  const fare = conn ? priceConnection(conn, fareOf(conn), { halfFare: USER.halfFare, returnTrip: trip === "return" }) : null;
   const depDate = conn ? new Date((conn.from.departureTimestamp ?? 0) * 1000) : null;
   const fromName = conn?.from.station.name ?? query.fromName;
   const toName = conn?.to.station.name ?? query.toName;
@@ -69,21 +74,22 @@ export function OffersView() {
   // MOCK: co-travellers pay the same fare, dogs the reduced fare, bikes at most a day bike pass.
   const bikePrice = Math.min(base, 14);
   const total = perPerson * party.persons + base * party.dogs + bikePrice * party.bikes;
-  const productName = trip === "return" ? "Return Ticket" : "Point-to-point Ticket";
+  const novaName = klass === "1" ? fare?.firstName : fare?.secondName;
+  const productName = trip === "return" ? "Return Ticket" : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
 
   function purchase() {
     if (!conn) return;
-    const start = new Date((conn.from.departureTimestamp ?? Date.now() / 1000) * 1000);
+    const start = new Date((conn.from.departureTimestamp ?? nowMs() / 1000) * 1000);
     const end = new Date(start);
     end.setHours(23, 59, 59);
     actions.addTicket({
-      id: `t-${Date.now()}`,
+      id: `t-${nowMs()}`,
       product: productName,
       from: fromName ?? "",
       to: toName ?? "",
       via: (via || "direct") + (party.persons + party.dogs + party.bikes > 1 ? ` · ${partyLabel(party)}` : ""),
-      validFrom: new Date(Math.min(Date.now(), start.getTime())).toISOString(),
+      validFrom: new Date(Math.min(nowMs(), start.getTime())).toISOString(),
       validTo: end.toISOString(),
       price: total,
       travelClass: effectiveClass as 1 | 2,
@@ -232,7 +238,8 @@ export function OffersView() {
               <Line label={<b className="font-bold">Total</b>} value={<b className="font-bold">CHF {total.toFixed(2)}</b>} />
             </div>
           </Card>
-          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">Prototype only — no payment is made. Prices are estimated.</p>
+          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">Prototype only — no payment is made.{" "}
+            {fare.source === "nova" ? "Prices from SBB's NOVA price service (OJP Fare test system)." : "Prices are estimated."}</p>
           <PrimaryButton onClick={purchase}>Buy for CHF {total.toFixed(2)}</PrimaryButton>
         </Sheet>
       )}

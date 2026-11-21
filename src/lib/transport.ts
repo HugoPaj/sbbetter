@@ -70,6 +70,27 @@ export type Connection = {
   accessWalk?: { minutes: number; metres: number | null };
   /** Service alerts that touch this connection (OJP only). */
   disruptions?: Disruption[];
+  /** Server-side handle to price this exact trip via /api/transport/fares (OJP only). */
+  fareRef?: string;
+};
+
+/** Real ticket price from SBB's NOVA price service (via OJP Fare), CHF, single trip. */
+export type NovaFare = {
+  second: number | null;
+  first: number | null;
+  /** Price of the regular point-to-point ticket when a cheaper Supersaver exists. */
+  secondRegular: number | null;
+  firstRegular: number | null;
+  /** English name of the cheapest product, e.g. "Supersaver Ticket" (through tickets only). */
+  secondName: string | null;
+  firstName: string | null;
+  halfFare: boolean;
+};
+
+export type FaresResponse = {
+  /** false when the OJP Fare API isn't reachable / subscribed: use the estimate. */
+  available: boolean;
+  fares: Record<string, NovaFare | null>;
 };
 
 export type Disruption = {

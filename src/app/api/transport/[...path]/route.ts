@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ojpConnections, ojpEnabled, ojpLocations, ojpNearby, ojpStationboard, parseCoord } from "@/lib/server/ojp";
-import type { Connection, Location } from "@/lib/transport";
+import { faresEnabled, ojpFares } from "@/lib/server/ojp-fare";
+import type { Connection, FaresResponse, Location } from "@/lib/transport";
 
 /**
  * Timetable proxy. Speaks transport.opendata.ch's URL + JSON format to the
@@ -9,6 +10,9 @@ import type { Connection, Location } from "@/lib/transport";
  * falls back to transport.opendata.ch so the demo never goes dark.
  *
  * The `X-Data-Source` response header says which upstream answered.
+ *
+ * /api/transport/fares?refs=a,b&hta=1 prices OJP connections (by their
+ * `fareRef`) with real NOVA prices via the OJP Fare API.
  */
 
 const OPENDATA = "https://transport.opendata.ch/v1";
@@ -17,6 +21,7 @@ const ALLOWED = new Set(["locations", "connections", "stationboard"]);
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/transport/[...path]">) {
   const { path } = await ctx.params;
   const endpoint = path.join("/");
+  if (endpoint === "fares") return fares(request);
   if (!ALLOWED.has(endpoint)) return Response.json({ error: `Unknown endpoint: ${endpoint}` }, { status: 404 });
   const sp = request.nextUrl.searchParams;
   const signal = request.signal;
@@ -36,6 +41,14 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/transpor
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 502 });
   }
+}
+
+async function fares(request: NextRequest) {
+  const sp = request.nextUrl.searchParams;
+  const refs = (sp.get("refs") ?? "").split(",").filter(Boolean).slice(0, 12);
+  const body: FaresResponse =
+    faresEnabled() && refs.length ? await ojpFares(refs, sp.get("hta") === "1", request.signal) : { available: faresEnabled(), fares: {} };
+  return Response.json(body, { headers: { "Cache-Control": "private, max-age=300", "X-Data-Source": "ojp-fare" } });
 }
 
 function json(body: unknown, source: "ojp" | "opendata") {

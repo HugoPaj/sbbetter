@@ -9,6 +9,7 @@
  * Needs OJP_API_KEY in .env.local (token from api-manager.opentransportdata.swiss).
  */
 import { XMLParser } from "fast-xml-parser";
+import { rememberTrip } from "./ojp-fare";
 import type { Checkpoint, Connection, Disruption, Journey, Location, Section, StationboardEntry } from "../transport";
 
 const ENDPOINT = "https://api.opentransportdata.swiss/ojp20";
@@ -49,7 +50,8 @@ type X = any;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-async function ojp(body: string, signal?: AbortSignal): Promise<X> {
+/** POST an OJP 2.0 request body (the part inside ServiceRequest) and return the raw XML. */
+export async function ojpPost(body: string, opts: { endpoint?: string; key?: string; signal?: AbortSignal } = {}): Promise<string> {
   const now = new Date().toISOString();
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <OJP xmlns="http://www.vdv.de/ojp" xmlns:siri="http://www.siri.org.uk/siri" version="2.0">
@@ -60,26 +62,42 @@ async function ojp(body: string, signal?: AbortSignal): Promise<X> {
     ${body.replaceAll("__NOW__", now)}
   </siri:ServiceRequest></OJPRequest>
 </OJP>`;
-  const res = await fetch(ENDPOINT, {
+  const res = await fetch(opts.endpoint ?? ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/xml",
-      Authorization: `Bearer ${process.env.OJP_API_KEY}`,
+      Authorization: `Bearer ${opts.key ?? process.env.OJP_API_KEY}`,
       "User-Agent": "sbb-travelers-hackathon",
       "Accept-Encoding": "gzip",
     },
     body: xml,
-    signal,
+    signal: opts.signal,
   });
-  if (!res.ok) throw new Error(`OJP HTTP ${res.status}`);
-  const doc = parser.parse(await res.text());
-  const delivery = doc?.OJP?.OJPResponse?.ServiceDelivery;
+  if (!res.ok) throw new OjpHttpError(res.status);
+  return res.text();
+}
+
+export class OjpHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`OJP HTTP ${status}`);
+  }
+}
+
+export const parseOjp = (raw: string): X => parser.parse(raw);
+
+async function ojpRaw(body: string, signal?: AbortSignal): Promise<{ delivery: X; raw: string }> {
+  const raw = await ojpPost(body, { signal });
+  const delivery = parseOjp(raw)?.OJP?.OJPResponse?.ServiceDelivery;
   if (!delivery) throw new Error("OJP: empty response");
-  return delivery;
+  return { delivery, raw };
+}
+
+async function ojp(body: string, signal?: AbortSignal): Promise<X> {
+  return (await ojpRaw(body, signal)).delivery;
 }
 
 /** Text out of `{Text: {"#text": …}}`, `{"#text": …}` or a plain string. */
-function text(n: X): string {
+export function text(n: X): string {
   if (n == null) return "";
   if (typeof n === "string" || typeof n === "number") return String(n);
   if (n.Text !== undefined) return text(n.Text);
@@ -87,7 +105,7 @@ function text(n: X): string {
   return "";
 }
 
-const num = (v: X) => (v === undefined || v === null || v === "" ? null : Number(v));
+export const num = (v: X) => (v === undefined || v === null || v === "" ? null : Number(v));
 
 // ---------------------------------------------------------------------------
 // Ids, places, time
@@ -298,6 +316,17 @@ function checkpoint(call: X, coords: Map<string, { lat: number; lon: number }>):
   };
 }
 
+/** Platform-level StopPointRef → its stop place (NOVA prices commercial stops, not platforms). */
+function stopParents(ctx: X): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const p of (ctx?.Places?.Place ?? []) as X[]) {
+    const ref = p?.StopPoint?.StopPointRef;
+    const parent = p?.StopPoint?.ParentRef;
+    if (ref && parent) map.set(String(ref), String(parent));
+  }
+  return map;
+}
+
 function situationsById(ctx: X): Map<string, Disruption> {
   const map = new Map<string, Disruption>();
   for (const s of (ctx?.Situations?.PtSituation ?? []) as X[]) {
@@ -342,7 +371,7 @@ export type OjpTripQuery = {
 export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Promise<Connection[]> {
   const [origin, destination] = await Promise.all([placeRef(q.from, signal), placeRef(q.to, signal)]);
   const when = `<DepArrTime>${zurichIso(q.date, q.time)}</DepArrTime>`;
-  const d = await ojp(
+  const { delivery: d, raw } = await ojpRaw(
     `<OJPTripRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <Origin>${origin}${q.isArrivalTime ? "" : when}</Origin>
@@ -361,11 +390,17 @@ export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Pro
   const situations = situationsById(delivery?.TripResponseContext);
   const origCoord = parseCoord(q.from);
 
+  // Keep each trip's raw XML so its fare can be requested later (OJP Fare needs the full Trip).
+  const rawTrips = raw.match(/<Trip>[\s\S]*?<\/Trip>/g) ?? [];
+  const parents = stopParents(delivery?.TripResponseContext);
+
   const connections: Connection[] = [];
-  for (const r of (delivery?.TripResult ?? []) as X[]) {
+  ((delivery?.TripResult ?? []) as X[]).forEach((r, i) => {
     const c = tripToConnection(r.Trip, coords, situations, origCoord);
-    if (c) connections.push(c);
-  }
+    if (!c) return;
+    if (rawTrips[i]) c.fareRef = rememberTrip(rawTrips[i], parents);
+    connections.push(c);
+  });
   return connections.sort((a, b) => (a.from.departureTimestamp ?? 0) - (b.from.departureTimestamp ?? 0));
 }
 

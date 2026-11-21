@@ -9,7 +9,8 @@ import { JourneySearchCard } from "@/components/journey-search-card";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest, type JourneyQuery } from "@/lib/journey-query";
 import { getConnections, type Connection } from "@/lib/transport";
 import { formatLongDate, zurichDateTime } from "@/lib/format";
-import { estimateFare } from "@/lib/pricing";
+import { priceConnection } from "@/lib/pricing";
+import { useNovaFares } from "@/lib/fares";
 import { USER } from "@/lib/mock-data";
 import { connectionKey, queryForConnection } from "@/lib/connection-key";
 
@@ -42,6 +43,7 @@ export function ConnectionsView() {
   const error = current ? result.error : null;
   const setItems = (fn: (cur: Connection[] | null) => Connection[]) => setResult((r) => ({ ...r, items: fn(r.items) }));
   const load = () => setRetry((n) => n + 1);
+  const fareOf = useNovaFares(items, USER.halfFare);
 
   if (!query) {
     return (
@@ -123,7 +125,7 @@ export function ConnectionsView() {
                       key={connectionKey(c)}
                       connection={c}
                       walkMinutes={query.walkMinutes}
-                      price={showPrices ? estimateFare(c, { halfFare: USER.halfFare }).secondClass : undefined}
+                      price={showPrices ? priceConnection(c, fareOf(c), { halfFare: USER.halfFare })?.secondClass : undefined}
                       href={journeyHref("/connections/detail", q, { key: connectionKey(c) })}
                     />
                   );
