@@ -11,7 +11,7 @@ import { DepartureBoard } from "@/components/plan/departure-board";
 import { RouteMap } from "@/components/plan/route-map";
 import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
 import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
-import { Capacity, DelayLabel, LineLabel, ModeBadge, delayNote, useForecast } from "@/components/journey";
+import { Capacity, DelayLabel, type DelayNote, LineLabel, ModeBadge, delayNote, useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
 import { ClosureDetails, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
@@ -944,21 +944,11 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
               <span className={cn("relative col-start-1 leading-5 tabular-nums", off && "text-muted")} style={{ ...row, ...vt(i, "time") }}>
                 {n.arr && <span className={cn("block tracking-[-0.03em]", n.arrLate ? "font-light text-muted line-through decoration-1" : change ? "font-light" : "font-bold")}>{n.arr}</span>}
                 {n.arrLate && <span className={cn("block font-bold tracking-[-0.04em]", n.delayed && "text-sbb-red")}>{n.arrLate}</span>}
-                {/* Delays sit in the empty time column of their own ride: the arrival's just above the
-                    time, in the ride leading here; the departure's just below, in the ride leaving.
-                    They take no room, so nothing moves when a forecast loads. Once a moment has
-                    passed it shows what happened, never a forecast (see delayNote). */}
-                {n.arrCp && (
-                  <span className="absolute bottom-full left-0 mb-0.5 leading-4">
-                    <DelayLabel note={delayNote(n.arrCp, "arrival", { forecast: n.forecast, past: reached })} />
-                  </span>
-                )}
-                {n.depCp && (
-                  <span className="absolute top-full left-0 mt-0.5 leading-4">
-                    <DelayLabel note={delayNote(n.depCp, "departure", { past: left })} />
-                  </span>
-                )}
+                {/* Each delay sits right under the time it belongs to, so it reads with that stop.
+                    Once a moment has passed it shows what happened, never a forecast (see delayNote). */}
+                {n.arrCp && <DelayLine note={delayNote(n.arrCp, "arrival", { forecast: n.forecast, past: reached })} />}
                 {n.dep && <span className={cn("block font-bold tracking-[-0.04em]", n.depGone && "text-muted")}>{n.dep}</span>}
+                {n.depCp && <DelayLine note={delayNote(n.depCp, "departure", { past: left })} />}
                 {!n.arr && !n.dep && n.at && <span className="block font-bold tracking-[-0.04em]">{n.at}</span>}
               </span>
               <span className="relative col-start-2" style={{ ...row, ...vt(i, "dot") }}>
@@ -992,6 +982,11 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
       </div>
     </Card>
   );
+}
+
+/** A delay on its own line under its time; nothing when there is none. */
+function DelayLine({ note }: { note: DelayNote | null }) {
+  return note ? <span className="-mt-0.5 block leading-4"><DelayLabel note={note} /></span> : null;
 }
 
 /** What happens between two stops; its rail is drawn by the timeline. */
