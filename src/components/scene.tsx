@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cn } from "./ui";
 
 type Variant = "lake" | "station" | "commute";
@@ -28,6 +28,27 @@ const STARS = Array.from({ length: 34 }, (_, i) => ({
 
 const RANGE = "M0 478L40 430l26 16 66-80 38 54 26-22 36 42 30-32 40-28 44 56 26-18 28 22v84H0z";
 
+/**
+ * The scenes are drawn 400 wide (a phone); on desktop the SVG shows x -800…1200.
+ * `Tile` repeats a background layer across that width, mirroring every other
+ * copy so the edges meet. People and landmarks stay single, in the middle.
+ */
+function Tile({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <g transform="translate(-800 0)">{children}</g>
+      <g transform="matrix(-1 0 0 1 0 0)">{children}</g>
+      {children}
+      <g transform="matrix(-1 0 0 1 800 0)">{children}</g>
+      <g transform="translate(800 0)">{children}</g>
+    </>
+  );
+}
+/** x positions of a 400-periodic, mirrored layout (see `Tile`) for an item `w` wide at `x`. */
+const tiled = (xs: number[], w = 0) => xs.flatMap((x) => [x - 800, -x - w, x, 800 - x - w, x + 800]);
+/** Full-width band: x and width covering the desktop view. */
+const WIDE = { x: -800, width: 2000 };
+
 function Cloud({ x, y, s = 1, delay = 0 }: { x: number; y: number; s?: number; delay?: number }) {
   return (
     <g className="sc-drift" style={{ animationDelay: `${delay}s` }}>
@@ -45,9 +66,11 @@ function Cloud({ x, y, s = 1, delay = 0 }: { x: number; y: number; s?: number; d
 function Backdrop({ id }: { id: string }) {
   return (
     <>
-      {STARS.map((s, i) => (
-        <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#fff" className={s.twinkle ? "sc-twinkle" : undefined} style={{ opacity: "var(--sc-stars)", animationDelay: `${(i % 7) * 0.6}s` }} />
-      ))}
+      <Tile>
+        {STARS.map((s, i) => (
+          <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#fff" className={s.twinkle ? "sc-twinkle" : undefined} style={{ opacity: "var(--sc-stars)", animationDelay: `${(i % 7) * 0.6}s` }} />
+        ))}
+      </Tile>
       {/* moon by night, sun by day */}
       <circle cx="322" cy="262" r="46" fill={`url(#halo-${id})`} />
       <circle cx="322" cy="262" r="15" style={fill("orb")} />
@@ -56,6 +79,7 @@ function Backdrop({ id }: { id: string }) {
         <circle cx="327" cy="266" r="2.2" />
         <circle cx="320" cy="270" r="1.4" />
       </g>
+      <Tile>
       <Cloud x={64} y={306} s={1.25} />
       <Cloud x={236} y={336} s={0.9} delay={-20} />
       <Cloud x={372} y={300} s={1.05} delay={-40} />
@@ -74,6 +98,7 @@ function Backdrop({ id }: { id: string }) {
       <rect y="400" width="400" height="130" fill={`url(#haze-${id})`} />
       <path d="M0 500q40-38 84-24t76-6q40-22 90 4t80-12q40-10 70 8v70H0z" style={fill("hills")} />
       <path d="M0 512q60-20 120-8t110-6q60-14 170 6v36H0z" style={fill("hills-2")} />
+      </Tile>
       {/* chalet on the hill */}
       <g transform="translate(296 464)">
         <rect x="-7" y="-1" width="14" height="9" style={fill("chalet")} />
@@ -151,6 +176,7 @@ function Lake({ id }: { id: string }) {
     <>
       <Backdrop id={id} />
       {/* far shore with the railway line */}
+      <Tile>
       <path d="M0 516q200-20 400 0v14H0z" style={fill("shore")} />
       <g style={line("rail")} fill="none" opacity="0.7">
         <path d="M0 491h400" strokeWidth="0.6" />
@@ -161,6 +187,7 @@ function Lake({ id }: { id: string }) {
       <rect y="524" width="400" height="92" fill={`url(#water-${id})`} />
       {/* reflections: the range, then the moon or sun */}
       <path d={RANGE} transform="translate(0 524) scale(1 -0.5) translate(0 -524)" style={fill("rock-shade")} opacity="0.2" />
+      </Tile>
       <g style={line("orb")} strokeWidth="1.8" strokeLinecap="round" opacity="0.55">
         <path d="M309 531h26M313 538h18M307 546h30M315 555h14M311 564h22M317 575h10M314 587h16" />
       </g>
@@ -171,9 +198,11 @@ function Lake({ id }: { id: string }) {
           <rect x="8" y="29" width="300" height="1.5" rx="0.75" style={{ ...fill("train-window"), ...night(0.35) }} />
         </g>
       </g>
-      <g style={line("ripple")} strokeWidth="1" strokeLinecap="round" opacity="0.5">
-        <path d="M30 546h52M196 556h66M132 572h44M22 584h38M236 590h54M352 566h38M150 600h30" />
-      </g>
+      <Tile>
+        <g style={line("ripple")} strokeWidth="1" strokeLinecap="round" opacity="0.5">
+          <path d="M30 546h52M196 556h66M132 572h44M22 584h38M236 590h54M352 566h38M150 600h30" />
+        </g>
+      </Tile>
       {/* sailing boat */}
       <g transform="translate(92 562)">
         <path d="M-9 8h18" style={line("ripple")} strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
@@ -184,6 +213,7 @@ function Lake({ id }: { id: string }) {
       </g>
 
       {/* near bank */}
+      <Tile>
       <path d="M0 612q110-30 220-12t180-6v286H0z" fill={`url(#grass-${id})`} />
       <path d="M0 716q100-30 210-8t190-14v186H0z" style={fill("grass-fg")} opacity="0.75" />
       <g style={fill("pine-lit")}>
@@ -218,6 +248,7 @@ function Lake({ id }: { id: string }) {
       <Pine x={354} y={636} s={0.92} />
       <Pine x={10} y={664} s={1.3} />
       <Pine x={388} y={660} s={1.25} />
+      </Tile>
 
       {/* hiking signpost */}
       <rect x="117" y="594" width="3" height="68" rx="1" fill="#8b9099" />
@@ -266,15 +297,21 @@ function Lake({ id }: { id: string }) {
   );
 }
 
+/** Platform paving: lines fanning out towards the viewer from the middle of the platform. */
+const PLATFORM_LINES = [
+  ...Array.from({ length: 19 }, (_, k) => 200 + (k - 9) * 104).map((x) => `M${x} 652L${200 + (x - 200) * 1.17} 716`),
+  ...Array.from({ length: 16 }, (_, k) => 200 + (k - 7.5) * 140).map((x) => `M${x} 716L${200 + (x - 200) * 1.31} 806`),
+].join("");
+
 function Station({ id }: { id: string }) {
   return (
     <>
       <Backdrop id={id} />
       {/* far wall and the track */}
-      <rect y="528" width="400" height="72" style={fill("wall")} />
-      <path d="M0 536h400" style={line("wall-line")} strokeWidth="2" />
-      <path d="M40 537v54M120 537v54M200 537v54M280 537v54M360 537v54" style={line("wall-line")} strokeWidth="1" opacity="0.7" />
-      <rect y="589" width="400" height="3" style={fill("rail")} />
+      <rect {...WIDE} y="528" height="72" style={fill("wall")} />
+      <path d="M-800 536h2000" style={line("wall-line")} strokeWidth="2" />
+      <path d={tiled([40, 120, 200]).map((x) => `M${x} 537v54`).join("")} style={line("wall-line")} strokeWidth="1" opacity="0.7" />
+      <rect {...WIDE} y="589" height="3" style={fill("rail")} />
       <path d="M372 584l28-12v24z" fill={GLOW} style={night(0.22)} />
       <g transform="translate(0 545.6) scale(2.9)">
         <g transform="translate(-95 0)">
@@ -283,28 +320,28 @@ function Station({ id }: { id: string }) {
       </g>
 
       {/* platform */}
-      <rect y="592" width="400" height="7" style={fill("edge")} />
-      <rect y="599" width="400" height="341" fill={`url(#floor-${id})`} />
-      <rect y="606" width="400" height="3.5" style={fill("marking")} opacity="0.85" />
-      <path d="M0 615.5h400" style={line("marking")} strokeWidth="2.4" strokeDasharray="3 5" opacity="0.35" />
-      <path d="M0 652h400M0 716h400M0 806h400" style={line("platform-line")} strokeWidth="1.2" />
-      <path d="M96 652l-18 64M200 652v64M304 652l18 64M-10 716l-40 90M130 716l-22 90M270 716l22 90M410 716l40 90" style={line("platform-line")} strokeWidth="1.2" />
+      <rect {...WIDE} y="592" height="7" style={fill("edge")} />
+      <rect {...WIDE} y="599" height="341" fill={`url(#floor-${id})`} />
+      <rect {...WIDE} y="606" height="3.5" style={fill("marking")} opacity="0.85" />
+      <path d="M-800 615.5h2000" style={line("marking")} strokeWidth="2.4" strokeDasharray="3 5" opacity="0.35" />
+      <path d="M-800 652h2000M-800 716h2000M-800 806h2000" style={line("platform-line")} strokeWidth="1.2" />
+      <path d={PLATFORM_LINES} style={line("platform-line")} strokeWidth="1.2" />
 
       {/* canopy with lamps, departure board, sector sign and clock */}
-      {[20, 160, 346].map((x) => (
+      {tiled([20, 160, 346]).map((x) => (
         <path key={x} d={`M${x - 9} 509l-30 90h78l-30-90z`} fill={GLOW} style={night(0.07)} />
       ))}
-      {[58, 262].map((x) => (
+      {tiled([58, 262], 7).map((x) => (
         <g key={x} style={fill("post")}>
           <rect x={x} y="506" width="7" height="92" />
           <rect x={x - 3} y="593" width="13" height="6" rx="1" />
           <path d={`M${x} 507h7l8 0v3h-4l-4 8h-7l-4-8h-4v-3z`} />
         </g>
       ))}
-      <rect x="-10" y="490" width="420" height="14" style={fill("canopy")} />
-      <rect x="-10" y="490" width="420" height="2.5" style={fill("canopy-lit")} />
-      <rect x="-10" y="504" width="420" height="3" style={fill("post")} />
-      {[20, 160, 346].map((x) => (
+      <rect {...WIDE} y="490" height="14" style={fill("canopy")} />
+      <rect {...WIDE} y="490" height="2.5" style={fill("canopy-lit")} />
+      <rect {...WIDE} y="504" height="3" style={fill("post")} />
+      {tiled([20, 160, 346]).map((x) => (
         <rect key={x} x={x - 10} y="507" width="20" height="2.6" rx="1.3" style={fill("lamp")} />
       ))}
 
@@ -378,17 +415,19 @@ function Station({ id }: { id: string }) {
   );
 }
 
-const SEATS = [60, 200, 340];
-const WINDOWS = [14, 144, 274];
+/** The landscape outside scrolls left by 400 and repeats, so it is drawn from -800 to 1600. */
+const PANS = [-800, -400, 0, 400, 800, 1200];
+const SEATS = tiled([60, 200, 340]);
+const WINDOWS = tiled([14, 144, 274], 112);
 
 function Commute({ id }: { id: string }) {
   return (
     <>
       {/* carriage: ceiling with light strip, wall, luggage rack */}
-      <rect width="400" height="322" style={fill("ceiling")} />
-      <rect y="300" width="400" height="40" fill={`url(#strip-${id})`} style={night(0.5)} />
-      <rect y="296" width="400" height="5" style={fill("ceiling-light")} />
-      <rect y="322" width="400" height="200" style={fill("wall")} />
+      <rect {...WIDE} height="322" style={fill("ceiling")} />
+      <rect {...WIDE} y="300" height="40" fill={`url(#strip-${id})`} style={night(0.5)} />
+      <rect {...WIDE} y="296" height="5" style={fill("ceiling-light")} />
+      <rect {...WIDE} y="322" height="200" style={fill("wall")} />
       <g>
         <rect x="52" y="314" width="64" height="26" rx="10" fill="#a8523f" />
         <path d="M68 314v26M100 314v26" stroke="#8a4031" strokeWidth="3" />
@@ -396,22 +435,24 @@ function Commute({ id }: { id: string }) {
         <path d="M298 300v-5h26v5" stroke="#2c444a" strokeWidth="3" fill="none" />
         <path d="M296 310v22M326 310v22" stroke="#2c444a" strokeWidth="2" />
       </g>
-      <rect y="339" width="400" height="5" rx="2" style={fill("trim")} />
-      <path d="M8 344v12M136 344v12M264 344v12M392 344v12" style={line("trim")} strokeWidth="3" />
+      <rect {...WIDE} y="339" height="5" rx="2" style={fill("trim")} />
+      <path d={tiled([8, 136, 264]).map((x) => `M${x} 344v12`).join("")} style={line("trim")} strokeWidth="3" />
 
       {/* windows with the landscape rolling past */}
       {WINDOWS.map((x) => (
         <rect key={x} x={x - 5} y="361" width="122" height="146" rx="17" style={fill("trim")} />
       ))}
       <g clipPath={`url(#panes-${id})`}>
-        <rect y="366" width="400" height="136" fill={`url(#view-${id})`} />
-        {STARS.slice(0, 16).map((s, i) => (
-          <circle key={i} cx={s.x} cy={370 + ((i * 29) % 70)} r={s.r * 0.8} fill="#fff" style={{ opacity: "var(--sc-stars)" }} />
-        ))}
+        <rect {...WIDE} y="366" height="136" fill={`url(#view-${id})`} />
+        <Tile>
+          {STARS.slice(0, 16).map((s, i) => (
+            <circle key={i} cx={s.x} cy={370 + ((i * 29) % 70)} r={s.r * 0.8} fill="#fff" style={{ opacity: "var(--sc-stars)" }} />
+          ))}
+        </Tile>
         <circle cx="334" cy="398" r="22" fill={`url(#halo-${id})`} />
         <circle cx="334" cy="398" r="8" style={fill("orb")} />
         <g className="sc-pan-far">
-          {[0, 400].map((o) => (
+          {PANS.map((o) => (
             <g key={o} transform={`translate(${o} 0)`}>
               <path d="M0 470l40-34 30 18 50-40 40 34 40-22 50 32 50-38 40 26 60 24v40H0z" style={fill("view")} />
               <path d="M120 414l12 10-5-1-4 6-5-5-6 4zM300 422l11 8-5-1-3 5-5-4-5 2z" style={fill("snow")} opacity="0.85" />
@@ -419,7 +460,7 @@ function Commute({ id }: { id: string }) {
           ))}
         </g>
         <g className="sc-pan">
-          {[0, 400].map((o) => (
+          {PANS.map((o) => (
             <g key={o} transform={`translate(${o} 0)`}>
               <path d="M0 484q50-22 100-8t100-2q60-18 120 4t80 6v30H0z" style={fill("view-2")} />
               <g style={fill("view-3")}>
@@ -437,8 +478,8 @@ function Commute({ id }: { id: string }) {
           <path key={x} d={`M${x + 18} 366h22l-36 136h-22zM${x + 54} 366h8l-36 136h-8z`} fill="#fff" opacity="0.07" />
         ))}
       </g>
-      <rect y="514" width="400" height="5" style={fill("trim")} />
-      <rect y="519" width="400" height="421" style={fill("floor")} />
+      <rect {...WIDE} y="514" height="5" style={fill("trim")} />
+      <rect {...WIDE} y="519" height="421" style={fill("floor")} />
 
       {/* seats */}
       {SEATS.map((cx) => (
@@ -512,7 +553,13 @@ function Commute({ id }: { id: string }) {
 export function Scene({ variant = "lake" }: { variant?: Variant }) {
   const id = variant;
   return (
-    <svg viewBox="0 0 400 880" preserveAspectRatio="xMidYMax slice" className={`scene scene-${variant} absolute inset-0 size-full`} aria-hidden>
+    // On a phone the SVG is five times as wide as its box, so x 0…400 fills the screen as before; on desktop it fits the box and shows the whole panorama.
+    <svg
+      viewBox="-800 0 2000 880"
+      preserveAspectRatio="xMidYMax slice"
+      className={`scene scene-${variant} absolute top-0 left-[-200%] h-full w-[500%] lg:left-0 lg:w-full`}
+      aria-hidden
+    >
       <defs>
         <linearGradient id={`sky-${id}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0.2" style={stop("sky-top")} />
@@ -564,7 +611,7 @@ export function Scene({ variant = "lake" }: { variant?: Variant }) {
           ))}
         </clipPath>
       </defs>
-      <rect width="400" height="880" fill={`url(#sky-${id})`} />
+      <rect {...WIDE} height="880" fill={`url(#sky-${id})`} />
       {variant === "lake" && <Lake id={id} />}
       {/* The station and the carriage sit higher, so the button on a phone clears the phones and the laptop. */}
       {variant === "station" && (
@@ -598,13 +645,16 @@ export function EmptyState({
   compact?: boolean;
 }) {
   return (
-    <div className="relative flex-1 overflow-hidden lg:mx-auto lg:my-8 lg:h-[min(760px,calc(100dvh-128px))] lg:w-full lg:max-w-[460px] lg:flex-none lg:rounded-[28px]">
+    <div className="relative flex-1 overflow-hidden">
       <Scene variant={variant} />
-      <div className="relative mx-[8.5px] rounded-[19px] bg-[#10141d]/55 px-2 pt-[12.5px] text-white light:bg-white/80 light:text-fg pb-4 text-center backdrop-blur-[2px]" style={{ marginTop: top }}>
+      <div
+        className="relative mx-[8.5px] mt-(--top) rounded-[19px] bg-[#10141d]/55 px-2 pt-[12.5px] text-white light:bg-white/80 light:text-fg pb-4 text-center backdrop-blur-[2px] lg:mx-auto lg:mt-10 lg:max-w-[520px] lg:px-6 lg:pt-4 lg:pb-5"
+        style={{ "--top": `${top}px` } as CSSProperties}
+      >
         <h2 className="text-[16px] font-bold">{title}</h2>
         <p className={cn("mt-[11.5px] leading-[20px] font-light tracking-tight hyphens-auto", compact ? "text-[13.5px]" : "text-[15.5px]")}>{text}</p>
       </div>
-      {action && <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+101px)]">{action}</div>}
+      {action && <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+101px)] lg:inset-x-0 lg:bottom-10 lg:mx-auto lg:w-[400px]">{action}</div>}
     </div>
   );
 }
