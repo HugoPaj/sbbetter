@@ -13,22 +13,35 @@ function seededRandom(seed: number) {
   return () => (s = (s * 9301 + 49297) % 233280) / 233280;
 }
 
-/** Deterministic "map lines" texture so each tile looks a bit different. */
+/** Deterministic miniature map (lake, streets, a railway line and its stop) so each tile looks a bit different. */
 function MapLines({ seed }: { seed: number }) {
   const rnd = seededRandom(seed);
-  const lines = Array.from({ length: 7 }, () => {
+  const streets = Array.from({ length: 7 }, () => {
     const x1 = rnd() * 220;
     const y1 = rnd() * 110;
     const ang = rnd() * Math.PI;
     const len = 60 + rnd() * 160;
     return { x1, y1, x2: x1 + Math.cos(ang) * len, y2: y1 + Math.sin(ang) * len, w: rnd() > 0.7 ? 1.6 : 0.8 };
   });
+  const lake = { cx: 130 + rnd() * 80, cy: 4 + rnd() * 36, rx: 34 + rnd() * 30, ry: 13 + rnd() * 12, rot: rnd() * 50 - 25 };
+  // The railway is a quadratic curve; the stop sits on it, clear of the label.
+  const [y0, cy, y1] = [36 + rnd() * 40, rnd() * 100, 30 + rnd() * 40];
+  const t = 0.62 + rnd() * 0.2;
+  const stop = { x: 2 * t * (1 - t) * 110 + t * t * 220, y: (1 - t) * (1 - t) * y0 + 2 * t * (1 - t) * cy + t * t * y1 };
+  const rail = `M0 ${y0} Q 110 ${cy} 220 ${y1}`;
   return (
-    <svg viewBox="0 0 220 110" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full opacity-30">
-      {lines.map((l, i) => (
-        <line key={i} {...l} stroke="#9fb0d8" strokeWidth={l.w} />
-      ))}
-      <path d={`M0 ${40 + rnd() * 40} Q 110 ${rnd() * 110} 220 ${40 + rnd() * 40}`} stroke="#cfd8ef" strokeWidth={2} fill="none" />
+    <svg viewBox="0 0 220 110" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full" aria-hidden>
+      <ellipse {...lake} transform={`rotate(${lake.rot} ${lake.cx} ${lake.cy})`} fill="#6f9bd6" opacity={0.22} />
+      <g opacity={0.3}>
+        {streets.map((l, i) => (
+          <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#9fb0d8" strokeWidth={l.w} />
+        ))}
+      </g>
+      <g opacity={0.45} fill="none">
+        <path d={rail} stroke="#cfd8ef" strokeWidth={3} />
+        <path d={rail} stroke="#2a3250" strokeWidth={1.6} strokeDasharray="6 6" />
+      </g>
+      <circle cx={stop.x} cy={stop.y} r={4.2} fill="#fff" stroke="#2a3250" strokeWidth={1.6} opacity={0.75} />
     </svg>
   );
 }

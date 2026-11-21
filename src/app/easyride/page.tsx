@@ -116,7 +116,7 @@ export default function EasyRidePage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-(--app-h) flex-col">
       <Header title="EasyRide" />
       <EmptyState
         variant="station"

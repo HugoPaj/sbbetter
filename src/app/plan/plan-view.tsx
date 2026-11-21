@@ -65,7 +65,7 @@ export function PlanView() {
   }
 
   return (
-    <div className={view === "timetable" ? "flex h-dvh flex-col overflow-hidden" : "flex min-h-dvh flex-col"}>
+    <div className={view === "timetable" ? "flex h-(--app-h) flex-col overflow-hidden" : "flex min-h-(--app-h) flex-col"}>
       <Header title="Plan" extend>
         <Segmented
           value={view}

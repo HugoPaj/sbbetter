@@ -37,6 +37,16 @@
    * reserves ~34pt; in a browser tab env() is 0, so keep at least that.
    */
   --home-inset: max(env(safe-area-inset-bottom), 34px);
+  /*
+   * iOS 26+ home-screen web app workarounds, set by IOS_PWA_SCRIPT in layout.tsx:
+   * --chin is how far 100dvh stops short of the physical bottom (WebKit leaves a black
+   * bar there); --safe-top replaces env(safe-area-inset-top), which WebKit reports as 0
+   * while the frosted status bar still covers the page (bug 301994).
+   */
+  --chin: 0px;
+  --safe-top: env(safe-area-inset-top);
+  /* Full screen height on phones; use instead of 100dvh. */
+  --app-h: calc(100dvh + var(--chin));
 }
 
 /* Light mode: `data-theme` is set on <html> before first paint (see layout.tsx and lib/theme.ts). */
@@ -75,6 +85,17 @@ body {
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+  }
+
+  /* Installed on iOS with a short viewport: stretch the document over the black bar, and make
+     <body> the frame for every `position: fixed` element (tab bar, bottom panels, sheets, toasts)
+     so `bottom: 0` lands on the physical screen edge instead of the short viewport's. */
+  :root[data-chin],
+  :root[data-chin] body {
+    height: var(--app-h);
+  }
+  :root[data-chin] body {
+    transform: translate(0);
   }
 }
 
@@ -135,90 +156,218 @@ body {
 
 /*
  * Illustrated empty states (components/scene.tsx): night in the dark theme, day in
- * the light one. `wall` is the platform wall at the station and the carriage wall
- * on the commute; the last block of each palette is the carriage interior.
+ * the light one. `--sc-night` / `--sc-day` fade the lamps, glows and flowers; the
+ * last block of each palette is the carriage interior.
  */
 .scene {
-  --sc-sky-top: #222c44;
-  --sc-sky-bottom: #55617f;
-  --sc-stars: 0.8;
-  --sc-rock-lit: #8b93a8;
-  --sc-rock-shade: #4b5368;
+  --sc-night: 1;
+  --sc-day: 0;
+  --sc-sky-top: #18213a;
+  --sc-sky-bottom: #5a678a;
+  --sc-haze: #a9a6c4;
+  --sc-stars: 0.85;
+  --sc-orb: #f4eccf;
+  --sc-cloud: #8b99ba;
+  --sc-cloud-o: 0.26;
+  --sc-range-far: #56627f;
+  --sc-rock-lit: #8f97ad;
+  --sc-rock-shade: #454d63;
   --sc-snow: #e6eaf2;
-  --sc-hills: #3d465c;
-  --sc-shore: #2b4329;
+  --sc-hills: #36405a;
+  --sc-hills-2: #2a3349;
+  --sc-chalet: #4a4250;
+  --sc-roof: #23202c;
+  --sc-shore: #263d2b;
+  --sc-rail: #161b28;
   --sc-water-top: #4c6a80;
-  --sc-water-bottom: #2b4257;
-  --sc-ripple: #86a3b5;
+  --sc-water-bottom: #22364a;
+  --sc-ripple: #9bb8ca;
   --sc-grass-top: #35502f;
-  --sc-grass-bottom: #111f14;
-  --sc-pine: #16291b;
+  --sc-grass-bottom: #132216;
+  --sc-grass-fg: #0c170f;
+  --sc-pine: #12231a;
+  --sc-pine-lit: #1f3a27;
+  --sc-trunk: #2a1d16;
+  --sc-bench: #1a1512;
   --sc-train: #d9dce3;
+  --sc-train-band: #232938;
   --sc-train-window: #f5d98a;
+  --sc-train-under: #151924;
   --sc-wall: #232a3a;
+  --sc-wall-line: #303951;
   --sc-canopy: #39425a;
+  --sc-canopy-lit: #56627f;
   --sc-post: #2b3348;
-  --sc-edge: #4a5674;
-  --sc-platform: #2c3448;
+  --sc-lamp: #ffe9a8;
+  --sc-edge: #56627f;
+  --sc-platform: #2a3246;
+  --sc-platform-lit: #3a4460;
+  --sc-platform-line: #353e57;
   --sc-marking: #e9ecf3;
 
   --sc-ceiling: #1b2133;
-  --sc-window: #3b4666;
-  --sc-view: #2f3a57;
-  --sc-orb: #dfe5f2;
+  --sc-ceiling-light: #ffe9b0;
+  --sc-trim: #3a425c;
+  --sc-window: #121a31;
+  --sc-window-2: #3d4c75;
+  --sc-view: #27304f;
+  --sc-view-2: #1c2541;
+  --sc-view-3: #131a30;
   --sc-floor: #141a2a;
   --sc-seat: #1d2f5c;
-  --sc-headrest: #24386b;
+  --sc-seat-lit: #263b70;
+  --sc-headrest: #2c427c;
+  --sc-cover: #c9cfdd;
+  --sc-table: #4a5370;
+  --sc-steam: #c9cfdd;
 }
 .scene-station {
-  --sc-sky-top: #1a2233;
-  --sc-sky-bottom: #4a5674;
+  --sc-sky-top: #141c30;
+  --sc-sky-bottom: #4f5b7b;
 }
 .scene-commute {
-  --sc-sky-top: #0c111c;
-  --sc-sky-bottom: #262d45;
   --sc-wall: #2a3149;
 }
 [data-theme="light"] .scene {
-  --sc-sky-top: #74b4e8;
+  --sc-night: 0;
+  --sc-day: 1;
+  --sc-sky-top: #62aee8;
   --sc-sky-bottom: #dcedf9;
+  --sc-haze: #fff;
   --sc-stars: 0;
-  --sc-rock-lit: #b9c2d0;
+  --sc-orb: #fff1a8;
+  --sc-cloud: #fff;
+  --sc-cloud-o: 0.92;
+  --sc-range-far: #a9c0d8;
+  --sc-rock-lit: #c6cdd9;
   --sc-rock-shade: #76839a;
   --sc-snow: #fff;
-  --sc-hills: #6f8498;
+  --sc-hills: #6f96a0;
+  --sc-hills-2: #5e9270;
+  --sc-chalet: #8a6248;
+  --sc-roof: #5a3b2c;
   --sc-shore: #5f9552;
-  --sc-water-top: #74b7dd;
+  --sc-rail: #59616f;
+  --sc-water-top: #7cc0e4;
   --sc-water-bottom: #3f8fc1;
-  --sc-ripple: #e2f2fb;
-  --sc-grass-top: #86bd66;
+  --sc-ripple: #e8f6fd;
+  --sc-grass-top: #8cc36a;
   --sc-grass-bottom: #44843d;
+  --sc-grass-fg: #37722f;
   --sc-pine: #2c5c35;
-  --sc-train: #f1f3f6;
-  --sc-train-window: #3c4859;
+  --sc-pine-lit: #418048;
+  --sc-trunk: #6b4a35;
+  --sc-bench: #6b4a35;
+  --sc-train: #f4f5f8;
+  --sc-train-band: #2c3442;
+  --sc-train-window: #a5d3ef;
+  --sc-train-under: #3a4150;
   --sc-wall: #b9c1cf;
+  --sc-wall-line: #a3adbe;
   --sc-canopy: #6f7a8f;
+  --sc-canopy-lit: #8f99ad;
   --sc-post: #5f697d;
+  --sc-lamp: #eef0f4;
   --sc-edge: #8791a3;
-  --sc-platform: #c9ced7;
+  --sc-platform: #cfd4dc;
+  --sc-platform-lit: #dde1e7;
+  --sc-platform-line: #bdc4cf;
   --sc-marking: #fff;
 
-  --sc-ceiling: #cdd3dd;
-  --sc-window: #a9d5f3;
-  --sc-view: #7fb47a;
-  --sc-orb: #fff3bf;
+  --sc-ceiling: #d5dae3;
+  --sc-ceiling-light: #fff;
+  --sc-trim: #a7afbf;
+  --sc-window: #74bbee;
+  --sc-window-2: #d8eefb;
+  --sc-view: #9bb9cf;
+  --sc-view-2: #76b56c;
+  --sc-view-3: #3f7f48;
   --sc-floor: #b4bbc7;
   --sc-seat: #2f4b92;
-  --sc-headrest: #3b59a6;
+  --sc-seat-lit: #3b59a6;
+  --sc-headrest: #4666b8;
+  --sc-cover: #f1f3f7;
+  --sc-table: #8891a3;
+  --sc-steam: #fff;
 }
 [data-theme="light"] .scene-station {
-  --sc-sky-top: #8ec0ea;
+  --sc-sky-top: #74b6ea;
   --sc-sky-bottom: #e4f1fa;
 }
 [data-theme="light"] .scene-commute {
-  --sc-sky-top: #f2f4f7;
-  --sc-sky-bottom: #dde1e8;
   --sc-wall: #e6e9ee;
+}
+
+/* Gentle motion in the scenes: twinkling stars, drifting clouds, a passing train. */
+.scene .sc-twinkle {
+  animation: sc-twinkle 3.6s ease-in-out infinite;
+}
+.scene .sc-drift {
+  animation: sc-drift 70s ease-in-out infinite alternate;
+}
+.scene .sc-pass {
+  animation: sc-pass 46s linear infinite;
+}
+.scene .sc-pan {
+  animation: sc-pan 26s linear infinite;
+}
+.scene .sc-pan-far {
+  animation: sc-pan 110s linear infinite;
+}
+.scene .sc-tick {
+  animation: sc-tick 60s steps(60) infinite;
+}
+.scene .sc-steam {
+  animation: sc-steam 3.2s ease-in-out infinite;
+}
+@keyframes sc-twinkle {
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes sc-drift {
+  from {
+    transform: translateX(-18px);
+  }
+  to {
+    transform: translateX(22px);
+  }
+}
+/* The train crosses the far shore, then the line stays empty for a while. */
+@keyframes sc-pass {
+  0% {
+    transform: translateX(-340px);
+  }
+  62%,
+  100% {
+    transform: translateX(450px);
+  }
+}
+@keyframes sc-pan {
+  to {
+    transform: translateX(-400px);
+  }
+}
+@keyframes sc-tick {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sc-steam {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(2px);
+  }
+  50% {
+    opacity: 0.75;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene * {
+    animation: none !important;
+  }
 }
 
 @keyframes sheet-up {
@@ -317,9 +466,24 @@ body {
     bottom: 8px;
   }
 
+  /* The scenes show the whole panorama here, so the passing train crosses all of it. */
+  .scene .sc-pass {
+    animation-name: sc-pass-wide;
+    animation-duration: 80s;
+  }
+
   /* Sheets are centred dialogs here: they pop in instead of sliding up. */
   .animate-sheet-up {
     animation: pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@keyframes sc-pass-wide {
+  0% {
+    transform: translateX(-1100px);
+  }
+  62%,
+  100% {
+    transform: translateX(1250px);
   }
 }
 @keyframes pop-in {
