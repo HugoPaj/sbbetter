@@ -24,15 +24,24 @@ export const SCENARIOS: { value: Scenario | ""; label: string; hint: string }[] 
 /** ok = nothing to do · changed = new plan, confirm it · act = you must move. */
 export type Tone = "ok" | "changed" | "act";
 
+/** What happens to one ride, drawn on that leg of the timeline. */
+export type LegStatus = { kind: "late"; minutes: number } | { kind: "cancelled" } | { kind: "missed" };
+
 export type Verdict = {
   tone: Tone;
   headline: string;
   detail: string;
   why: string;
-  /** Notes shown on the affected legs, keyed by index into `connection.sections`. */
-  notes: Record<number, string>;
+  /** Status of the affected legs, keyed by index into `connection.sections`. */
+  notes: Record<number, LegStatus>;
   /** The one connection we recommend instead, and how much later it arrives. */
-  alternative?: { query: JourneyQuery; connection: Connection; lateMinutes: number };
+  alternative?: {
+    query: JourneyQuery;
+    connection: Connection;
+    lateMinutes: number;
+    /** Set when the alternative only replaces the trip from a change station on: keep sections up to `at` (ridden `late` min late). */
+    rejoin?: { at: number; late: number };
+  };
 };
 
 const SMALL_DELAY = 4;
@@ -75,7 +84,7 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
       headline: `Your ${line} at ${formatTime(first.s.departure.departure)} is cancelled`,
       detail: alt ? `Take the ${boarding(alt)} instead.` : "We found no later connection. Please ask station staff.",
       why: "The train has a technical fault and cannot run.",
-      notes: { [first.i]: "Cancelled" },
+      notes: { [first.i]: { kind: "cancelled" } },
       alternative: alt && { query: queryForConnection(query, alt), connection: alt, lateMinutes: lateBy(alt, conn) },
     };
   }
@@ -88,7 +97,7 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
       headline: `You'll arrive at ${arrivalPlus(delay)}, ${delay} min later`,
       detail: `${line} is running ${delay} min late. Stay on board, there is nothing to do.`,
       why: WHY_LATE,
-      notes: { [first.i]: `+${delay}' late` },
+      notes: { [first.i]: { kind: "late", minutes: delay } },
     };
   }
 
@@ -103,7 +112,7 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
       headline: `You'll still arrive at ${plannedArrival}`,
       detail: `${line} is running ${SMALL_DELAY} min late. Your change in ${stationName} still works.`,
       why: WHY_LATE,
-      notes: { [first.i]: `+${SMALL_DELAY}' late` },
+      notes: { [first.i]: { kind: "late", minutes: SMALL_DELAY } },
     };
   }
 
@@ -122,7 +131,7 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
     headline: `You'll miss your change in ${stationName}`,
     detail: alt ? `Take the ${boarding(alt)} instead.` : "We found no later connection. Please ask station staff.",
     why: `${WHY_LATE} ${line} is ${delay} min late, and the ${lineOf(next.s)} can't wait.`,
-    notes: { [first.i]: `+${delay}' late`, [next.i]: "You'll miss this" },
-    alternative: alt && { query: queryForConnection(onward, alt), connection: alt, lateMinutes: lateBy(alt, conn) },
+    notes: { [first.i]: { kind: "late", minutes: delay }, [next.i]: { kind: "missed" } },
+    alternative: alt && { query: queryForConnection(onward, alt), connection: alt, lateMinutes: lateBy(alt, conn), rejoin: { at: first.i, late: delay } },
   };
 }

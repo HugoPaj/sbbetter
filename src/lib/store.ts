@@ -28,6 +28,8 @@ export type SavedTrip = {
   departure: string; // ISO
   arrival: string; // ISO
   summary: string; // e.g. "B 701 → RE 33"
+  /** Extra URL params to reopen it (e.g. a re-routed onward connection). */
+  params?: Record<string, string>;
 };
 
 export type Favourite = { id: string; line1: string; line2: string };

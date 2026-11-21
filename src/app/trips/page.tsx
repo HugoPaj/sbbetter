@@ -64,7 +64,7 @@ export default function TripsPage() {
           <div className="space-y-[8.5px] px-[8.5px] pt-4.25">
             {trips.map((t) => (
               <Card key={t.id} className="flex items-center gap-1.75 py-3 pr-1.75 pl-[15px]">
-                <Link href={journeyHref("/connections/detail", t.query, { key: t.id })} className="min-w-0 flex-1">
+                <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className="min-w-0 flex-1">
                   <p className="text-[16px] leading-snug font-bold">
                     <span className="inline-block">
                       {t.query.fromName} <LongArrow className="mx-1.25" />

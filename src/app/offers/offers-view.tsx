@@ -6,7 +6,7 @@ import { ArrowRight, ArrowRightLeft, Bike, Info, Pencil, User } from "lucide-rea
 import { Card, Checkbox, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, Radio, Sheet, Spinner, Stepper, toast } from "@/components/ui";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
-import { fetchConnection } from "@/lib/connection-key";
+import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
 import { priceConnection, cityOf } from "@/lib/pricing";
 import { useNovaFares } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
@@ -45,7 +45,7 @@ export function OffersView() {
     const q = journeyFromSearchParams(new URLSearchParams(raw));
     if (!q) return;
     const ctrl = new AbortController();
-    fetchConnection(q, key, ctrl.signal)
+    loadConnection(q, new URLSearchParams(raw), ctrl.signal)
       .then(setConn)
       .catch((e: Error) => e.name !== "AbortError" && setConn(null));
     return () => ctrl.abort();
@@ -94,8 +94,10 @@ export function OffersView() {
       price: total,
       travelClass: effectiveClass as 1 | 2,
     });
-    if (autoSave && key && !trips.some((t) => t.id === key)) {
-      actions.toggleTrip({ id: key, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → ") });
+    const reroute = rerouteFromSearchParams(new URLSearchParams(raw));
+    const tripId = key && key + (reroute ? `~${reroute.key}` : "");
+    if (autoSave && tripId && !trips.some((t) => t.id === tripId)) {
+      actions.toggleTrip({ id: tripId, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined });
     }
     toast(`Ticket purchased for CHF ${total.toFixed(2)} (demo, nothing was charged).`);
     router.push("/tickets");
