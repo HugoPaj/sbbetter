@@ -53,10 +53,6 @@ body {
   bottom: calc(var(--home-inset) + 94px);
   right: 14px;
 }
-/* Opened, the credit is wider than the gap beside the "Departure board" pill: show it one row up. */
-.maplibregl-map .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
-  bottom: calc(var(--home-inset) + 94px + 39px);
-}
 .maplibregl-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
   margin: 0;
   min-height: 31px;

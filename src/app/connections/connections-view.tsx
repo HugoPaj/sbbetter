@@ -12,7 +12,7 @@ import { formatLongDate, zurichDateTime } from "@/lib/format";
 import { priceConnection } from "@/lib/pricing";
 import { useNovaFares } from "@/lib/fares";
 import { USER } from "@/lib/mock-data";
-import { connectionKey, queryForConnection } from "@/lib/connection-key";
+import { connectionKey, queryForConnection, uniqueConnections } from "@/lib/connection-key";
 
 export function ConnectionsView() {
   const router = useRouter();
@@ -31,7 +31,7 @@ export function ConnectionsView() {
     if (!q) return;
     const ctrl = new AbortController();
     getConnections({ ...toConnectionsRequest(q), limit: 6 }, ctrl.signal)
-      .then((items) => setResult({ key: `${queryKey}#${retry}`, items, error: null }))
+      .then((items) => setResult({ key: `${queryKey}#${retry}`, items: uniqueConnections(items), error: null }))
       .catch(
         (e: Error) => e.name !== "AbortError" && setResult({ key: `${queryKey}#${retry}`, items: null, error: "Could not load connections." }),
       );
@@ -67,7 +67,7 @@ export function ConnectionsView() {
       const next = await getConnections({ ...toConnectionsRequest(query), ...zurichDateTime(anchor), isArrivalTime: false, limit: 5 });
       setItems((cur) => {
         const seen = new Set(cur!.map(connectionKey));
-        const fresh = next.filter((c) => !seen.has(connectionKey(c)));
+        const fresh = uniqueConnections(next).filter((c) => !seen.has(connectionKey(c)));
         const merged = dir === "later" ? [...cur!, ...fresh] : [...fresh, ...cur!];
         return merged.sort((a, b) => (a.from.departureTimestamp ?? 0) - (b.from.departureTimestamp ?? 0));
       });

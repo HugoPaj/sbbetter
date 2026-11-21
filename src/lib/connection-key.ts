@@ -3,9 +3,25 @@ import { toConnectionsRequest } from "./journey-query";
 import { getConnections, type Connection } from "./transport";
 import { zurichDateTime } from "./format";
 
-/** Stable id for a connection so detail/offers screens can re-fetch it. */
+/**
+ * Stable id for a connection so detail/offers screens can re-fetch it. Departure
+ * and lines alone aren't unique: the same trains can be combined with another
+ * change station or a later last leg, so the boarding stops and arrival count too.
+ */
 export function connectionKey(c: Connection): string {
-  return `${c.from.departureTimestamp}-${c.products.join("+")}`;
+  const legs = c.sections.filter((s) => s.journey).map((s) => `${s.journey!.category} ${s.journey!.number}@${s.departure.station.id ?? s.departure.station.name ?? ""}`.trim());
+  return `${c.from.departureTimestamp}-${c.to.arrivalTimestamp}-${legs.join("+")}`;
+}
+
+/** Drop connections that are the same itinerary as an earlier one (the API occasionally repeats a trip). */
+export function uniqueConnections(list: Connection[]): Connection[] {
+  const seen = new Set<string>();
+  return list.filter((c) => {
+    const k = connectionKey(c);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 /** Query anchored at this connection's departure (so a re-fetch returns it first). */

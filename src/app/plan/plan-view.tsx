@@ -74,7 +74,7 @@ export function PlanView() {
       </Header>
 
       {view === "timetable" ? (
-        <div className="relative min-h-0 flex-1">
+        <div className="group relative min-h-0 flex-1">
           <JourneyMap
             center={pos}
             showSelf
@@ -159,7 +159,7 @@ export function PlanView() {
           ) : (
             <button
               onClick={openNearestBoard}
-              className="absolute bottom-[calc(var(--home-inset)+94px)] left-1/2 z-10 flex h-[31px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/50 bg-[#141414] px-3.5 text-[16px] font-light tracking-tight whitespace-nowrap"
+              className="absolute bottom-[calc(var(--home-inset)+94px)] left-1/2 z-10 flex h-[31px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/50 bg-[#141414] px-3.5 text-[16px] font-light tracking-tight whitespace-nowrap group-has-[.maplibregl-compact-show]:invisible"
             >
               <BoardIcon className="size-[22px]" /> Departure board
             </button>

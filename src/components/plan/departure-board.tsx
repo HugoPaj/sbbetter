@@ -37,7 +37,8 @@ export function DepartureBoard({ stationId, stationName, onClose }: { stationId:
 
   return (
     <Sheet title={stationName} onClose={onClose} full>
-      <div className="mb-3 flex">
+      {/* pt-px: the selected pill overhangs the track by 1px, which the sheet's scroll area would clip. */}
+      <div className="mb-3 flex pt-px">
         <PillToggle
           value={type}
           onChange={setType}
