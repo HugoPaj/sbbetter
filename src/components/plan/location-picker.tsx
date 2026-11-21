@@ -69,7 +69,7 @@ export function LocationPicker({
           onClick={(e) => e.stopPropagation()}
           className="flex min-h-0 flex-1 flex-col lg:h-[min(640px,calc(100dvh-96px))] lg:w-[560px] lg:flex-none lg:overflow-hidden lg:rounded-[24px] lg:border lg:border-fg/10 lg:bg-page lg:shadow-2xl lg:shadow-black"
         >
-        <div className="bg-sbb-red px-[8.5px] text-white pt-[max(var(--safe-top),9px)] pb-2.5">
+        <div className="bg-sbb-red px-[8.5px] text-white pt-[max(calc(var(--safe-top)+var(--top-gap)),9px)] pb-2.5">
           <div className="relative flex h-10.25 items-center justify-center">
             <button aria-label="Back" onClick={onClose} className="absolute left-0 -ml-1.25 p-1.75">
               <ChevronLeft className="size-6" strokeWidth={1.75} />

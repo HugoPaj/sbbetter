@@ -78,7 +78,7 @@ export function Header({
     <>
       <header
         className={cn(
-          "sticky top-0 z-30 bg-sbb-red px-2 text-white pt-[max(var(--safe-top),6px)] lg:flex lg:h-16 lg:items-center lg:gap-8 lg:px-8 lg:pt-0 lg:pb-0",
+          "sticky top-0 z-30 bg-sbb-red px-2 text-white pt-[max(calc(var(--safe-top)+var(--top-gap)),6px)] lg:flex lg:h-16 lg:items-center lg:gap-8 lg:px-8 lg:pt-0 lg:pb-0",
           children ? "pb-4" : "pb-[3px]",
           // One continuous shade from mid-toggle down into the skirt, painted over the toggle too,
           // as SBB does, so the red reads as a single surface rather than slab + strip + skirt.

@@ -45,6 +45,11 @@
    * (which can read 0 while the status bar still covers the page, WebKit bug 301994).
    */
   --safe-top: env(safe-area-inset-top);
+  /*
+   * Extra room under the status bar for header text. On iOS 26 the status bar's frosted blur
+   * reaches below the safe area, so in the installed app titles need to clear it.
+   */
+  --top-gap: 0px;
   /* Full screen height on phones; use instead of 100dvh. */
   --app-h: 100dvh;
 }
@@ -55,6 +60,7 @@
   @media (display-mode: standalone) and (max-aspect-ratio: 1/2) {
     :root {
       --safe-top: max(env(safe-area-inset-top), 47px);
+      --top-gap: 12px;
     }
   }
 }
@@ -119,6 +125,9 @@ body {
   }
   :root[data-ios-app] body {
     transform: translate(0);
+  }
+  :root[data-ios-app] {
+    --top-gap: 12px;
   }
 }
 
