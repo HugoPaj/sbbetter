@@ -6,6 +6,7 @@ import { ArrowRight, ArrowRightLeft, Bike, Info, Pencil, Ticket, User } from "lu
 import { Card, Checkbox, DESK_COL, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, Radio, Sheet, Spinner, Stepper, cn, toast } from "@/components/ui";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
+import { sbbDeepLink } from "@/lib/sbb-deeplink";
 import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
 import { cityOf, passSummary } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
@@ -15,9 +16,6 @@ import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Connection } from "@/lib/transport";
 
 type Offer = "regular" | "supersaver" | "p2p";
-
-/** Wall-clock time for event handlers (kept out of render for the React Compiler). */
-const nowMs = () => Date.now();
 
 export function OffersView() {
   const router = useRouter();
@@ -95,29 +93,17 @@ export function OffersView() {
   const productName = isReturn ? "Return Ticket" : covered && ticketCount === 0 && upgradeName ? upgradeName : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
 
+  /** Tickets are bought in the real SBB app (deep link); the journey goes to Trips at the same time. */
   function purchase() {
     if (!conn) return;
-    const start = new Date((conn.from.departureTimestamp ?? nowMs() / 1000) * 1000);
-    const end = new Date(start);
-    end.setHours(23, 59, 59);
-    actions.addTicket({
-      id: `t-${nowMs()}`,
-      product: productName,
-      from: stretch?.from ?? fromName ?? "",
-      to: stretch?.to ?? toName ?? "",
-      via: (via || "direct") + (party.persons + party.dogs + party.bikes > 1 ? ` · ${partyLabel(party)}` : ""),
-      validFrom: new Date(Math.min(nowMs(), start.getTime())).toISOString(),
-      validTo: end.toISOString(),
-      price: total,
-      travelClass: effectiveClass as 1 | 2,
-    });
     const reroute = rerouteFromSearchParams(new URLSearchParams(raw));
     const tripId = key && key + (reroute ? `~${reroute.key}` : "");
     if (autoSave && tripId && !trips.some((t) => t.id === tripId)) {
       actions.toggleTrip({ id: tripId, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined });
     }
-    toast(`Ticket purchased for CHF ${total.toFixed(2)} (demo, nothing was charged).`);
-    router.push("/tickets");
+    window.open(sbbDeepLink(conn), "_blank", "noopener");
+    toast(autoSave ? "Journey saved to Trips. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
+    router.push("/trips");
   }
 
   return (
@@ -295,9 +281,9 @@ export function OffersView() {
               <Line label={<b className="font-bold">Total</b>} value={<b className="font-bold">CHF {total.toFixed(2)}</b>} />
             </div>
           </Card>
-          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">Prototype only — no payment is made.{" "}
+          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">You pay in the SBB app (or on sbb.ch if it isn&apos;t installed).{" "}
             {fare.source === "nova" ? "Prices from SBB's NOVA price service (OJP Fare test system)." : "Prices are estimated."}</p>
-          <PrimaryButton onClick={purchase}>Buy for CHF {total.toFixed(2)}</PrimaryButton>
+          <PrimaryButton onClick={purchase}>Buy in the SBB app · CHF {total.toFixed(2)}</PrimaryButton>
         </Sheet>
       )}
 

@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
+import { forecastConnection } from "@/lib/connection-estimate";
+import { disruptionEnd } from "@/lib/disruption-forecast";
 import type { Connection, Journey, Section } from "@/lib/transport";
 import { formatMinutes, formatTime, parseApiDuration } from "@/lib/format";
 import { passTag, type Fare } from "@/lib/pricing";
@@ -138,6 +141,9 @@ export function ConnectionCard({
   const disruption = connection.disruptions?.[0];
   const dep = connection.from.prognosis?.departure ?? connection.from.departure;
   const delayed = (connection.from.delay ?? 0) > 0;
+  const end = disruption ? disruptionEnd(disruption) : null;
+  const forecast = useForecast(connection);
+  const lastRide = connection.sections.findLastIndex((x) => x.journey);
   return (
     <Link href={href} className="relative block overflow-hidden rounded-[19px] bg-surface px-[15px] pt-[15px] pb-[15px] transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
       {price !== undefined && (
@@ -164,7 +170,10 @@ export function ConnectionCard({
           <span className="text-[15.5px] font-bold tracking-[-0.04em] tabular-nums">{formatTime(connection.from.departure)}</span>
         </span>
         <Timeline connection={connection} />
-        <span className="text-[15.5px] font-bold tracking-[-0.04em] tabular-nums">{formatTime(connection.to.arrival)}</span>
+        <span className="flex items-baseline gap-1 text-[15.5px] font-bold tracking-[-0.04em] tabular-nums">
+          {formatTime(connection.to.arrival)}
+          {!delayed && <DelayForecast minutes={forecast?.[lastRide]} />}
+        </span>
         {delayed && (
           <p className="col-span-2 col-start-2 -mt-1.25 text-[12px] text-sbb-red">
             +{connection.from.delay}&apos; expected {formatTime(dep)}
@@ -179,8 +188,42 @@ export function ConnectionCard({
         <p className="mt-2 flex items-center gap-1.5 text-[13px] leading-tight text-sbb-red">
           <TriangleAlert className="size-3.5 shrink-0" strokeWidth={2} />
           <span className="truncate">{disruption.summary}</span>
+          {end && <span className="shrink-0">· likely over {formatTime(new Date(end.likely).toISOString())}</span>}
         </p>
       )}
     </Link>
   );
+}
+
+/**
+ * The delay model's forecast, beside the time it shifts: "~" marks it as a forecast
+ * (not a live delay); muted while small, red from 3 min, when it starts to matter.
+ */
+export function DelayForecast({ minutes, className }: { minutes?: number; className?: string }) {
+  if (!minutes) return null;
+  return (
+    <span
+      className={cn("text-[12px] font-bold tracking-normal", minutes >= 3 ? "text-sbb-red" : "text-muted", className)}
+      aria-label={`likely up to ${minutes} minute${minutes === 1 ? "" : "s"} late`}
+      title={`Forecast: likely up to ${minutes} min late`}
+    >
+      ~+{minutes}&apos;
+    </span>
+  );
+}
+
+/** Delay forecasts for a connection's rides (see forecastConnection), once the model has loaded. */
+export function useForecast(connection: Connection | null | undefined): Record<number, number> | null {
+  const [state, setState] = useState<{ for: Connection; data: Record<number, number> } | null>(null);
+  useEffect(() => {
+    if (!connection) return;
+    let live = true;
+    forecastConnection(connection)
+      .then((data) => live && setState({ for: connection, data }))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [connection]);
+  return state && state.for === connection ? state.data : null;
 }

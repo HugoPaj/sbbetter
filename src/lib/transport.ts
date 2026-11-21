@@ -103,6 +103,10 @@ export type Disruption = {
   reason?: string;
   description?: string;
   cause?: string;
+  /** When it started and SBB's current estimate of its end (ISO), and whether it was planned (construction). */
+  start?: string;
+  end?: string;
+  planned?: boolean;
 };
 
 export type StationboardEntry = Omit<Journey, "passList"> & {

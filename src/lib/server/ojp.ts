@@ -342,6 +342,9 @@ function situationsById(ctx: X): Map<string, Disruption> {
       reason: text(content?.ReasonContent?.ReasonText) || undefined,
       description: text(content?.DescriptionContent?.DescriptionText) || undefined,
       cause: s.AlertCause ? String(s.AlertCause) : undefined,
+      start: s.ValidityPeriod?.StartTime ? String(s.ValidityPeriod.StartTime) : undefined,
+      end: s.ValidityPeriod?.EndTime ? String(s.ValidityPeriod.EndTime) : undefined,
+      planned: s.Planned === undefined ? undefined : String(s.Planned) === "true",
     });
   }
   return map;

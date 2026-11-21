@@ -9,11 +9,12 @@ import { DepartureBoard } from "@/components/plan/departure-board";
 import { RouteMap } from "@/components/plan/route-map";
 import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
 import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
-import { Capacity, LineLabel, ModeBadge } from "@/components/journey";
+import { Capacity, DelayForecast, LineLabel, ModeBadge, useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
 import { connectionKey, loadConnection, queryForConnection, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { SCENARIOS, assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
+import { disruptionEnd } from "@/lib/disruption-forecast";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
 import { passNotice, type PassSaving } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
@@ -70,6 +71,8 @@ export function DetailView() {
   const key = sp.get("key");
   const router = useRouter();
   const [conn, setConn] = useState<Connection | null | undefined>(undefined);
+  /** Delay model forecast per ride of `conn`, in minutes (keyed by section index). */
+  const forecast = useForecast(conn);
   const { trips } = useAppState();
   const [sheet, setSheet] = useState<"more" | "sim" | "time" | null>(null);
   const clock = useNow();
@@ -254,7 +257,7 @@ export function DetailView() {
       const minutes = Math.round((s.walk?.duration ?? 0) / 60);
       legs.push(
         s.journey
-          ? { kind: "ride", section: s, status: opts.status?.(i), depNote: opts.note?.(i) }
+          ? { kind: "ride", section: s, status: opts.status?.(i), depNote: opts.note?.(i), forecast: c === conn ? forecast?.[i] : undefined }
           : {
               kind: "walk",
               minutes,
@@ -588,6 +591,7 @@ function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
         <span className="flex-1 text-[14.5px] leading-snug font-bold">{single ? disruptions[0].summary : `${disruptions.length} service alerts on your route`}</span>
         {expandable && <ChevronDown className={cn("mt-px size-4.25 shrink-0 transition-transform", open && "rotate-180")} strokeWidth={1.5} />}
       </button>
+      <LikelyOver disruptions={disruptions} />
       {open &&
         (single ? (
           <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{more(disruptions[0])}</p>
@@ -605,10 +609,30 @@ function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
   );
 }
 
+/** When the (first unplanned) disruption is likely over, from past disruptions with the same cause. */
+function LikelyOver({ disruptions }: { disruptions: Disruption[] }) {
+  const end = disruptions.map((d) => disruptionEnd(d)).find(Boolean);
+  if (!end) return null;
+  const at = (ms: number) => formatTime(new Date(ms).toISOString());
+  return (
+    <p className="mt-1 pl-7 text-[14.5px] leading-snug font-light">
+      Likely over around {at(end.likely)}
+      {end.sbb && end.sbb < end.likely && <span className="text-fg/60"> (SBB says {at(end.sbb)})</span>}
+    </p>
+  );
+}
+
 type Note = { text: string; tone: "muted" | "ok" };
 
 type Leg =
-  | { kind: "ride"; section: Section; status?: LegStatus; /** Shown under the boarding stop. */ depNote?: Note; /** Replacement shown in place of this leg. */ instead?: ReactNode }
+  | {
+      kind: "ride";
+      section: Section;
+      status?: LegStatus;
+      /** Shown under the boarding stop. */ depNote?: Note;
+      /** Replacement shown in place of this leg. */ instead?: ReactNode;
+      /** Delay model forecast for the arrival, minutes (see DelayForecast). */ forecast?: number;
+    }
   | {
       kind: "walk";
       minutes: number;
@@ -633,6 +657,8 @@ type Node = {
   arrLate?: string;
   /** Show `arrLate` in red (a delay), not as a calm new time (a new plan). */
   delayed?: boolean;
+  /** Delay model forecast for the arrival, minutes; only without a known delay. */
+  forecast?: number;
   dep?: string;
   /** The ride leaving from here won't be taken (cancelled or missed). */
   depGone?: boolean;
@@ -691,7 +717,7 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
       items.push({ type: "leg", leg });
       last = null;
       const late = status?.kind === "late" && s.arrival.arrivalTimestamp ? formatTime(new Date((s.arrival.arrivalTimestamp + status.minutes * 60) * 1000).toISOString()) : undefined;
-      place({ key: keyOf(s.arrival), name: s.arrival.station.name ?? "", checkpoint: s.arrival, arr: formatTime(s.arrival.arrival), arrLate: late, delayed: !!late, pill: late && `+${(status as { minutes: number }).minutes} min late`, arrPl: platformLabel(s.arrival.prognosis?.platform ?? s.arrival.platform, cat) });
+      place({ key: keyOf(s.arrival), name: s.arrival.station.name ?? "", checkpoint: s.arrival, arr: formatTime(s.arrival.arrival), arrLate: late, delayed: !!late, forecast: late ? undefined : leg.forecast, pill: late && `+${(status as { minutes: number }).minutes} min late`, arrPl: platformLabel(s.arrival.prognosis?.platform ?? s.arrival.platform, cat) });
     } else {
       if (!leg.minutes && (!leg.from || !leg.to || keyOf(leg.from) === keyOf(leg.to))) continue;
       if (leg.start) place({ key: "origin", name: leg.start.name, dep: leg.start.time });
@@ -832,6 +858,7 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
               <span className={cn("col-start-1 leading-5 tabular-nums", off && "text-muted")} style={{ ...row, ...vt(i, "time") }}>
                 {n.arr && <span className={cn("block tracking-[-0.03em]", n.arrLate ? "font-light text-muted line-through decoration-1" : change ? "font-light" : "font-bold")}>{n.arr}</span>}
                 {n.arrLate && <span className={cn("block font-bold tracking-[-0.04em]", n.delayed && "text-sbb-red")}>{n.arrLate}</span>}
+                <DelayForecast minutes={n.forecast} className="block leading-4" />
                 {n.dep && <span className={cn("block font-bold tracking-[-0.04em]", n.depGone && "text-muted")}>{n.dep}</span>}
                 {!n.arr && !n.dep && n.at && <span className="block font-bold tracking-[-0.04em]">{n.at}</span>}
               </span>
