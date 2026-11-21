@@ -13,13 +13,14 @@ import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
 import { Capacity, DelayForecast, LineLabel, ModeBadge, useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
-import { connectionKey, loadConnection, queryForConnection, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
+import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { SCENARIOS, assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { disruptionEnd } from "@/lib/disruption-forecast";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
 import { passNotice, type PassSaving } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
 import { USER_PASSES } from "@/lib/mock-data";
+import { coverageOf } from "@/lib/passes";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import { getConnections, type Checkpoint, type Connection, type Disruption, type Section } from "@/lib/transport";
 
@@ -71,7 +72,11 @@ export function DetailView() {
   const query = journeyFromSearchParams(new URLSearchParams(raw));
   const key = sp.get("key");
   const router = useRouter();
-  const [conn, setConn] = useState<Connection | null | undefined>(undefined);
+  // Shown straight away when the list already had it (see cachedConnection), then refreshed
+  // with live data and the path for the map; undefined only while there is nothing to show.
+  const cached = cachedConnection(new URLSearchParams(raw));
+  const [loaded, setLoaded] = useState<{ raw: string; conn: Connection | null } | null>(null);
+  const conn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
   /** Delay model forecast per ride of `conn`, in minutes (keyed by section index). */
   const forecast = useForecast(conn);
   const { trips } = useAppState();
@@ -102,9 +107,10 @@ export function DetailView() {
     const q = journeyFromSearchParams(new URLSearchParams(raw));
     if (!q) return;
     const ctrl = new AbortController();
-    loadConnection(q, new URLSearchParams(raw), ctrl.signal, { track: true })
-      .then(setConn)
-      .catch((e: Error) => e.name !== "AbortError" && setConn(null));
+    const sp = new URLSearchParams(raw);
+    loadConnection(q, sp, ctrl.signal, { track: true })
+      .then((c) => setLoaded({ raw, conn: c ?? cachedConnection(sp) }))
+      .catch((e: Error) => e.name !== "AbortError" && setLoaded({ raw, conn: cachedConnection(sp) }));
     return () => ctrl.abort();
   }, [raw, key]);
 
@@ -136,8 +142,12 @@ export function DetailView() {
   const price = fare?.secondClass ?? null;
   // What a travelcard changes about the ticket; not while a disruption says to take another route.
   const pass = !verdict?.alternative ? fare?.pass : undefined;
-  /** The traveller's own trip needs no ticket: only upgrades and tickets for people travelling along are left to sell. */
-  const covered = !!fare?.pass && price === 0;
+  /**
+   * The traveller's own trip needs no ticket: only upgrades and tickets for people travelling along are left to sell.
+   * Known from the travelcards alone, before any price has loaded.
+   */
+  const coverage = conn ? coverageOf(conn, USER_PASSES) : null;
+  const covered = fare ? !!fare.pass && price === 0 : !!coverage?.pass && coverage.parts.length === 0;
   const offersHref = journeyHref("/offers", query, { key: key ?? "", ...rParams });
   const fromLabel = query.fromName === "Current location" ? "Your chosen location" : query.fromName;
   const walk = conn?.accessWalk?.minutes ?? query.walkMinutes;
@@ -187,7 +197,9 @@ export function DetailView() {
     // Swap the plan in place first, so the missed legs morph into the new ones (shared stops
     // stay put, the rest fades), then sync the URL, which re-fetches the same trip.
     const swap = () => {
-      setConn(alt.rejoin ? stitch(conn, chosen, alt.rejoin.at) : chosen);
+      // Remembered, so the URL change below keeps showing it while it is re-fetched.
+      rememberConnections([chosen]);
+      setLoaded({ raw, conn: alt.rejoin ? stitch(conn, chosen, alt.rejoin.at) : chosen });
       setPendingLate(alt.rejoin ? { at: alt.rejoin.at, late: alt.rejoin.late } : null);
       setPicked(null);
       setScenario("");
@@ -366,7 +378,7 @@ export function DetailView() {
       </Overlap>
       </div>
 
-      {conn === undefined && <ItinerarySkeleton />}
+      {conn === undefined && <ItinerarySkeleton from={fromLabel} to={query.toName} />}
       {conn === null && <ErrorBox message="Could not load this connection." />}
 
       {conn && !mapMode && (
@@ -400,17 +412,17 @@ export function DetailView() {
 
       {conn && !mapMode && !verdict?.alternative && (
         <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px] lg:left-[248px] lg:w-[520px] lg:max-w-none lg:translate-x-0 lg:px-[24.5px]">
-          {price === null ? (
-            <div role="status" aria-label="Loading price" className="flex h-[44px] w-full items-center justify-center rounded-full bg-surface-2 shadow-lg shadow-black/40">
-              <Skeleton className="h-[14px] w-[150px] bg-fg/15" />
-            </div>
-          ) : covered ? (
+          {/* The way to the tickets is there from the start; only the amount waits for the price lookup. */}
+          {covered ? (
             <OutlineButton href={offersHref} className="shadow-lg shadow-black/40">
               Class upgrade or co-travellers
             </OutlineButton>
           ) : (
             <PrimaryButton href={offersHref}>
-              Tickets from&nbsp;<b className="font-bold">CHF {price.toFixed(2)}</b>
+              Tickets from&nbsp;
+              <b className="flex items-center gap-[5px] font-bold" aria-busy={price === null}>
+                CHF {price === null ? <Skeleton className="h-[13px] w-[38px] bg-white/45" /> : price.toFixed(2)}
+              </b>
             </PrimaryButton>
           )}
         </div>

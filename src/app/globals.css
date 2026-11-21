@@ -394,6 +394,27 @@ body {
   animation: fade-in 160ms ease-out;
 }
 
+/*
+ * Loading placeholders (see Skeleton in components/ui.tsx). They wait a moment before fading
+ * in, so a load that finishes quickly never flashes them (their space is held all along),
+ * and then breathe until the content arrives.
+ */
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+.skeleton {
+  animation:
+    fade-in 200ms ease-out 150ms backwards,
+    skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 350ms infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: fade-in 200ms ease-out 150ms backwards;
+  }
+}
+
 /* Maps inside sheets (route / walk): attribution sits in the map's own corner. */
 .route-map .maplibregl-map .maplibregl-ctrl-bottom-right {
   bottom: 8px;

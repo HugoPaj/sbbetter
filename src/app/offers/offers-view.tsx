@@ -8,8 +8,9 @@ import { OffersSkeleton } from "@/components/skeletons";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
 import { openInSbb } from "@/lib/sbb-deeplink";
-import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
-import { cityOf, passSummary } from "@/lib/pricing";
+import { cachedConnection, loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
+import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
+import { coverageOf } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
 import { USER, USER_PASSES, fullName } from "@/lib/mock-data";
@@ -25,7 +26,10 @@ export function OffersView() {
   const query = journeyFromSearchParams(new URLSearchParams(raw));
   const key = sp.get("key");
 
-  const [conn, setConn] = useState<Connection | null | undefined>(undefined);
+  // Shown straight away when already seen this session, then refreshed.
+  const cached = cachedConnection(new URLSearchParams(raw));
+  const [loaded, setLoaded] = useState<{ raw: string; conn: Connection | null } | null>(null);
+  const conn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
   const [trip, setTrip] = useState<"single" | "return">("single");
   // Until the user picks a class here, follow Profile → Settings for ticket purchase.
   const [prefClass] = useSetting<string>("purchase.class", "2");
@@ -44,9 +48,10 @@ export function OffersView() {
     const q = journeyFromSearchParams(new URLSearchParams(raw));
     if (!q) return;
     const ctrl = new AbortController();
-    loadConnection(q, new URLSearchParams(raw), ctrl.signal)
-      .then(setConn)
-      .catch((e: Error) => e.name !== "AbortError" && setConn(null));
+    const sp = new URLSearchParams(raw);
+    loadConnection(q, sp, ctrl.signal)
+      .then((c) => setLoaded({ raw, conn: c ?? cachedConnection(sp) }))
+      .catch((e: Error) => e.name !== "AbortError" && setLoaded({ raw, conn: cachedConnection(sp) }));
     return () => ctrl.abort();
   }, [raw, key]);
 
@@ -75,7 +80,15 @@ export function OffersView() {
     .join(" · ");
   const firstMode = conn?.sections.find((s) => s.journey)?.journey?.category === "B" ? "Bus" : null;
 
+  /**
+   * What there is to offer is known as soon as the connection is, unless a travelcard covers
+   * part of it: which tickets are left to buy then depends on the prices. Until the price
+   * arrives, the offers are shown as they are, with only the amounts still to come.
+   */
+  const known = !!conn && (!!fare || !coverageOf(conn, USER_PASSES).pass);
   const base = fare ? (klass === "1" ? fare.firstClass : fare.secondClass) : 0;
+  // Modelled, not looked up: it never waits for the price.
+  const cityAddOn = fare?.cityAddOn ?? (conn ? estimateFare(conn, { halfFare: USER_PASSES.halfFare }).cityAddOn : null);
   const cityOn = city && !arrivalCovered;
   const perPerson =
     base +
@@ -91,6 +104,7 @@ export function OffersView() {
   const ticketCount = covered && klass === "2" ? party.persons - 1 : party.persons;
   const novaName = klass === "1" ? fare?.firstName : fare?.secondName;
   const upgradeName = klass === "1" || offer === "p2p" ? "Point-to-Point Class Upgrade" : offer === "supersaver" ? "Supersaver Class Upgrade" : null;
+  const productKnown = !!fare || isReturn;
   const productName = isReturn ? "Return Ticket" : covered && ticketCount === 0 && upgradeName ? upgradeName : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
 
@@ -122,6 +136,12 @@ export function OffersView() {
             <p className="text-[14.5px] font-light tracking-tight text-muted">
               {formatShortDate(depDate)}
               {depDate.getFullYear()}, {formatTime(conn.from.departure)}
+            </p>
+          )}
+          {/* Holds the line of the departure, so the cards below don't move when it arrives. */}
+          {conn === undefined && (
+            <p className="flex h-[22px] items-center">
+              <Skeleton className="h-[12px] w-[132px]" />
             </p>
           )}
         </Card>
@@ -168,21 +188,12 @@ export function OffersView() {
         </div>
       </Overlap>
 
-      {/* The connection, then its price: both are looked up before there is anything to offer. */}
-      {(conn === undefined || (conn && !fare)) && (
-        <>
-          <div className={DESK_COL}>
-            <OffersSkeleton />
-          </div>
-          <div className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 items-center gap-[8.5px] rounded-t-[22px] bg-[#1c1c1c] pt-[16.5px] pr-[18px] pb-[calc(var(--home-inset)+93px)] pl-4 shadow-[0_-8px_24px_rgba(0,0,0,0.5)] lg:bottom-5 lg:left-[calc(50%+124px)] lg:max-w-[672px] lg:rounded-[22px] lg:border lg:border-fg/10 light:bg-white">
-            <Skeleton className="h-[44px] w-full rounded-full" />
-          </div>
-        </>
-      )}
+      {/* Placeholder offers only while what there is to offer is itself unknown (see `known`). */}
+      {conn !== null && !known && <OffersSkeleton className={DESK_COL} />}
       {conn === null && <ErrorBox message="Could not load offers." />}
 
-      {fare && (
-        <div className={cn("mt-4.25 px-[8.5px]", DESK_COL)}>
+      {known && (
+        <div className={cn("mt-4.25 px-[8.5px]", DESK_COL)} aria-busy={!fare}>
           {pass && (
             <Card className="mb-[8.5px] flex items-start gap-2.5 px-[15px] py-3">
               <Ticket className="mt-0.5 size-4.5 shrink-0 text-ok" strokeWidth={1.75} />
@@ -204,7 +215,7 @@ export function OffersView() {
                 <div className="flex items-baseline justify-between gap-2.5">
                   <span className="text-[16px] leading-[22px] font-bold">Regular offer</span>
                   <span className="text-[15px] font-bold whitespace-nowrap">
-                    <span className="text-[12px]">CHF</span> {base.toFixed(2)}
+                    <Chf value={fare ? base : null} />
                   </span>
                 </div>
                 <p className="text-[14px] leading-[20px] font-light tracking-tight">
@@ -237,14 +248,15 @@ export function OffersView() {
                 <Checkbox checked={city} />
                 <span className="min-w-0 flex-1 truncate text-[16px] font-light tracking-tight">City {cityOf(toName ?? "")}</span>
                 <span className="text-[16px] font-light whitespace-nowrap">
-                  + <span className="text-[12px]">CHF</span> {fare.cityAddOn.toFixed(2)}
+                  + <Chf value={cityAddOn} />
                 </span>
               </button>
             )}
             {ticketCount > 0 && (
-              <button onClick={() => setSheet("info")} aria-label={`About the ${productName}`} className="ml-[44px] flex h-[57px] w-[calc(100%-44px)] items-center border-t border-surface-3 pr-4.25 text-left">
-                <span className="flex-1 text-[16px] font-light tracking-tight">
-                  {ticketCount}× {productName}
+              <button onClick={() => setSheet("info")} disabled={!productKnown} aria-label={`About the ${productKnown ? productName : "ticket"}`} className="ml-[44px] flex h-[57px] w-[calc(100%-44px)] items-center border-t border-surface-3 pr-4.25 text-left">
+                <span className="flex flex-1 items-center gap-[5px] text-[16px] font-light tracking-tight">
+                  {/* NOVA names the product it priced (e.g. a Supersaver Ticket). */}
+                  {ticketCount}× {productKnown ? productName : <Skeleton className="h-[14px] w-[150px]" />}
                 </span>
                 <Info className="size-[19px]" strokeWidth={1.25} />
               </button>
@@ -255,8 +267,8 @@ export function OffersView() {
             <>
               <h2 className="px-[8.5px] pt-[14.5px] pb-1.5 text-[13.5px] font-light tracking-tight">Additional offers</h2>
               <div className="space-y-[8.5px]">
-                <OfferRow checked={offer === "supersaver"} onClick={() => setOffer("supersaver")} label="Supersaver Class Upgrade" price={fare.supersaverUpgrade} discount />
-                <OfferRow checked={offer === "p2p"} onClick={() => setOffer("p2p")} label="Point-to-Point Class Upgrade" price={fare.pointToPointUpgrade} />
+                <OfferRow checked={offer === "supersaver"} onClick={() => setOffer("supersaver")} label="Supersaver Class Upgrade" price={fare?.supersaverUpgrade ?? null} discount />
+                <OfferRow checked={offer === "p2p"} onClick={() => setOffer("p2p")} label="Point-to-Point Class Upgrade" price={fare?.pointToPointUpgrade ?? null} />
               </div>
             </>
           )}
@@ -264,14 +276,17 @@ export function OffersView() {
       )}
       <div className="h-[calc(204px+var(--home-inset))]" />
 
-      {fare && (
+      {conn !== null && (
         <div className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 items-center lg:bottom-5 lg:left-[calc(50%+124px)] lg:max-w-[672px] lg:rounded-[22px] lg:border lg:border-fg/10 gap-[8.5px] rounded-t-[22px] bg-[#1c1c1c] light:bg-white pt-[16.5px] pr-[18px] pb-[calc(var(--home-inset)+93px)] pl-4 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
-          {total > 0 ? (
+          {/* The buttons are there from the start, and work once there is a price to pay. */}
+          {!fare || total > 0 ? (
             <>
-              <button onClick={() => (quickBuy ? purchase() : setConfirm(true))} aria-label={quickBuy ? "Quick purchase" : "Pay"} className="flex h-[27px] w-[43.5px] shrink-0 items-center justify-center rounded-md border border-fg/60 text-[13.5px] font-semibold">
+              <button onClick={() => (quickBuy ? purchase() : setConfirm(true))} disabled={!fare} aria-label={quickBuy ? "Quick purchase" : "Pay"} className="flex h-[27px] w-[43.5px] shrink-0 items-center justify-center rounded-md border border-fg/60 text-[13.5px] font-semibold disabled:opacity-50">
                 Pay
               </button>
-              <PrimaryButton onClick={() => setConfirm(true)}>Continue to purchase overview</PrimaryButton>
+              <PrimaryButton onClick={() => setConfirm(true)} disabled={!fare}>
+                Continue to purchase overview
+              </PrimaryButton>
             </>
           ) : (
             <PrimaryButton disabled>No ticket needed</PrimaryButton>
@@ -353,14 +368,23 @@ function Times() {
   return <span className="text-[13px]">×</span>;
 }
 
-function OfferRow({ checked, onClick, label, price, discount }: { checked: boolean; onClick: () => void; label: string; price: number; discount?: boolean }) {
+/** "CHF 12.40"; the amount is a placeholder while its price loads (null). */
+function Chf({ value }: { value: number | null }) {
+  return (
+    <>
+      <span className="text-[12px]">CHF</span> {value === null ? <Skeleton className="inline-block h-[0.8em] w-[2.6em] align-baseline" /> : value.toFixed(2)}
+    </>
+  );
+}
+
+function OfferRow({ checked, onClick, label, price, discount }: { checked: boolean; onClick: () => void; label: string; price: number | null; discount?: boolean }) {
   return (
     <button onClick={onClick} className="relative flex min-h-[51px] w-full items-center gap-2.5 overflow-hidden rounded-[19px] bg-surface px-[15px] py-2.5 text-left">
       {discount && <span className="absolute top-0 right-0 h-[15px] rounded-bl-[8.5px] bg-surface-3 pr-2.5 pl-3 text-[11px] leading-[15px] font-bold">%</span>}
       <Radio checked={checked} />
       <span className="min-w-0 flex-1 text-[16px] leading-tight font-light tracking-tight">{label}</span>
       <span className="text-[16px] font-light whitespace-nowrap">
-        <span className="text-[12px]">CHF</span> {price.toFixed(2)}
+        <Chf value={price} />
       </span>
     </button>
   );

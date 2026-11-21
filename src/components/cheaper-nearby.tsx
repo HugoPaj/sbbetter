@@ -8,7 +8,6 @@ import { passSummary, type Quote } from "@/lib/pricing";
 import type { Connection } from "@/lib/transport";
 import { connectionKey } from "@/lib/connection-key";
 import { Sheet, Skeleton, cn } from "./ui";
-import { CheaperRowSkeleton, DayPriceRowSkeleton } from "./skeletons";
 
 /** Why a departure is cheaper: the travelcard that covers it, or the product NOVA priced. */
 const reason = (c: Connection, fare: Quote) => (fare.pass ? passSummary(fare.pass, { from: c.from.station.name, to: c.to.station.name }) : fare.secondName);
@@ -19,8 +18,9 @@ const reason = (c: Connection, fare: Quote) => (fare.pass ? passSummary(fare.pas
  * are several (also under Advanced search); it is where its effect shows.
  * Without `onPriorityChange` there is nothing to choose between, so no switch.
  * The last row opens the whole day (DayPrices), for when the time is still open.
- * While departures around it are still being looked up or priced, and nothing
- * cheaper has turned up yet, a placeholder row holds the place of a suggestion.
+ * While departures around it are still being looked up or priced, the last row
+ * says so: most searches turn up nothing cheaper, so no room is held for a
+ * suggestion that may never come (the list below would jump when it didn't).
  */
 export function CheaperNearby({
   items,
@@ -45,6 +45,11 @@ export function CheaperNearby({
 }) {
   return (
     <section aria-label="Cheaper departures" aria-busy={loading} className="mb-1.25 divide-y divide-surface-3 overflow-hidden rounded-[19px] bg-surface">
+      {loading && items.length === 0 && (
+        <p role="status" className="sr-only">
+          Looking for cheaper departures
+        </p>
+      )}
       {items.length > 0 && (
         <div className="flex items-center justify-between gap-2 py-2 pr-2 pl-[15px]">
           <h2 className="truncate text-[12.5px] font-light tracking-tight text-muted">Cheaper nearby</h2>
@@ -70,7 +75,6 @@ export function CheaperNearby({
           )}
         </div>
       )}
-      {loading && items.length === 0 && <CheaperRowSkeleton />}
       {items.map(({ dir, connection: c, fare, saving, shift }) => {
         const why = reason(c, fare);
         return (
@@ -92,6 +96,11 @@ export function CheaperNearby({
       <button onClick={onOpenDay} className="flex w-full items-center gap-3 px-[15px] py-2.5 text-left transition-colors hover:bg-fg/5">
         <CalendarSearch className="size-5 shrink-0 text-muted" strokeWidth={1.5} />
         <span className="min-w-0 flex-1 truncate text-[13.5px] font-light tracking-tight">{dayLabel}</span>
+        {loading && items.length === 0 && (
+          <span aria-hidden className="skeleton shrink-0 text-[12px] font-light tracking-tight text-muted">
+            Comparing nearby…
+          </span>
+        )}
         <ChevronRight className="size-4.5 shrink-0 text-muted" strokeWidth={1.5} />
       </button>
     </section>
@@ -101,7 +110,8 @@ export function CheaperNearby({
 /**
  * The whole day at a glance: every departure that costs less than the one the
  * traveller asked for, in order of departure. Fills in while the day is being
- * scanned and priced.
+ * scanned and priced: the status line says what is still going on. How many
+ * departures will turn out cheaper is unknown, so no placeholder rows.
  */
 export function DayPrices({
   title,
@@ -137,12 +147,12 @@ export function DayPrices({
         {!busy && (items.length ? ` ${items.length} ${items.length > 1 ? "departures cost" : "departure costs"} less.` : " No other departure that day costs less.")}
       </p>
       {busy && (
-        <div className="mt-3 flex items-center gap-2.5 px-1 text-[13px] font-light text-muted">
+        <div role="status" className="mt-3 flex items-center gap-2.5 px-1 text-[13px] font-light text-muted">
           <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-fg/20 border-t-fg" />
           {scanning ? "Looking up the rest of the day…" : `Pricing ${pending} more ${pending > 1 ? "departures" : "departure"}…`}
         </div>
       )}
-      {(items.length > 0 || busy) && (
+      {items.length > 0 && (
         <ul aria-busy={busy} className="mt-3 divide-y divide-surface-3 overflow-hidden rounded-[19px] bg-surface">
           {items.map(({ connection: c, fare, saving }) => {
             const why = reason(c, fare);
@@ -168,8 +178,6 @@ export function DayPrices({
               </li>
             );
           })}
-          {/* Placeholders for what is still being looked up or priced; a few at most, the list grows as prices arrive. */}
-          {busy && Array.from({ length: Math.max(1, Math.min(3, scanning ? 3 - Math.min(items.length, 2) : pending)) }, (_, i) => <DayPriceRowSkeleton key={i} />)}
         </ul>
       )}
       <p className="mt-3 px-1 text-[11px] leading-snug text-muted">Prices are live quotes: Supersaver tickets can sell out or change. The lowest price is shown in green.</p>

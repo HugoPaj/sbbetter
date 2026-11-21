@@ -15,7 +15,7 @@ import { usePrices, useQuotes } from "@/lib/fares";
 import { CHEAPER_SETTING, cheaperNearby, cheaperThatDay, fetchDay, fetchNearby, plannedAhead, searchWindow, type CheaperPriority } from "@/lib/cheaper";
 import { useSetting } from "@/lib/store";
 import { USER_PASSES } from "@/lib/mock-data";
-import { connectionKey, queryForConnection, uniqueConnections } from "@/lib/connection-key";
+import { connectionKey, queryForConnection, rememberConnections, uniqueConnections } from "@/lib/connection-key";
 
 type Result = {
   key: string;
@@ -56,11 +56,15 @@ export function ConnectionsView() {
     getConnections({ ...toConnectionsRequest(q), limit: 6 }, ctrl.signal)
       .then(async (found) => {
         const items = uniqueConnections(found);
+        rememberConnections(items);
         const asked = (q.isArrivalTime ? items.at(-1) : items[0]) ?? null;
         const since = Date.now() / 1000;
         setResult({ key, items, error: null, asked, nearby: [], scanning: !!asked, since });
         if (!asked) return;
-        await fetchNearby(q, asked, items, since, (found) => setResult((r) => (r.key === key ? { ...r, nearby: [...r.nearby, ...found] } : r)), ctrl.signal);
+        await fetchNearby(q, asked, items, since, (found) => {
+          rememberConnections(found);
+          setResult((r) => (r.key === key ? { ...r, nearby: [...r.nearby, ...found] } : r));
+        }, ctrl.signal);
         setResult((r) => (r.key === key ? { ...r, scanning: false } : r));
       })
       .catch((e: Error) => e.name !== "AbortError" && setResult((r) => (r.key === key ? r : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], scanning: false, since: 0 })));
@@ -102,6 +106,7 @@ export function ConnectionsView() {
           ? new Date(((items.at(-1)!.from.departureTimestamp ?? 0) + 60) * 1000)
           : new Date(((items[0].from.departureTimestamp ?? 0) - 75 * 60) * 1000);
       const next = await getConnections({ ...toConnectionsRequest(query), ...zurichDateTime(anchor), isArrivalTime: false, limit: 5 });
+      rememberConnections(next);
       setItems((cur) => {
         const seen = new Set(cur!.map(connectionKey));
         const fresh = uniqueConnections(next).filter((c) => !seen.has(connectionKey(c)));
@@ -132,7 +137,10 @@ export function ConnectionsView() {
     dayScan.current?.abort();
     const ctrl = (dayScan.current = new AbortController());
     setDay({ key, open: true, items: [], scanning: true });
-    fetchDay(query!, asked, result.since, (found) => setDay((d) => (d?.key === key ? { ...d, items: [...d.items, ...found] } : d)), ctrl.signal).finally(() =>
+    fetchDay(query!, asked, result.since, (found) => {
+      rememberConnections(found);
+      setDay((d) => (d?.key === key ? { ...d, items: [...d.items, ...found] } : d));
+    }, ctrl.signal).finally(() =>
       setDay((d) => (d?.key === key ? { ...d, scanning: false } : d)),
     );
   }
@@ -148,19 +156,25 @@ export function ConnectionsView() {
     else groups.push({ day, list: [c] });
   }
 
+  // While the results load, the day searched for already stands where the first date will
+  // (they are the same but for an arrive-by search just after midnight), so nothing moves.
+  const firstDate = groups[0]?.day ?? (!items && !error && query.date ? formatLongDate(new Date(`${query.date}T12:00:00Z`)) : null);
+
   /** First date + "Earlier": under the search card on phones, above the results on desktop. */
   const firstDay = (className: string) =>
-    groups[0] && (
+    firstDate && (
       <div className={className}>
-        <h2 className="text-[15px] font-light tracking-tight">{groups[0].day}</h2>
-        <button
-          onClick={() => more("earlier")}
-          disabled={loadingMore === "earlier"}
-          className="flex h-6.75 items-center gap-[3.5px] rounded-full px-[8.5px] text-[12px] font-light text-muted hover:text-fg"
-        >
-          <ChevronUp className="size-3.5" strokeWidth={1.5} />
-          {loadingMore === "earlier" ? "Loading…" : "Earlier"}
-        </button>
+        <h2 className="text-[15px] font-light tracking-tight">{firstDate}</h2>
+        {groups[0] && (
+          <button
+            onClick={() => more("earlier")}
+            disabled={loadingMore === "earlier"}
+            className="flex h-6.75 items-center gap-[3.5px] rounded-full px-[8.5px] text-[12px] font-light text-muted hover:text-fg"
+          >
+            <ChevronUp className="size-3.5" strokeWidth={1.5} />
+            {loadingMore === "earlier" ? "Loading…" : "Earlier"}
+          </button>
+        )}
       </div>
     );
 

@@ -32,8 +32,26 @@ export function queryForConnection(q: JourneyQuery, c: Connection): JourneyQuery
   return { ...q, date, time, isArrivalTime: false };
 }
 
+/**
+ * Connections already seen this session, by key: the detail and offers screens
+ * show the one tapped right away and only refresh it (live delays, the path on
+ * the map) in the background, instead of waiting for it to load again.
+ * A tracked copy (with its path) is never replaced by an untracked one.
+ */
+const seen = new Map<string, Connection>();
+const tracked = (c: Connection) => c.sections.some((s) => s.track);
+
+export function rememberConnections(list: Connection[]) {
+  for (const c of list) {
+    const k = connectionKey(c);
+    const old = seen.get(k);
+    if (!old || !tracked(old) || tracked(c)) seen.set(k, c);
+  }
+}
+
 export async function fetchConnection(q: JourneyQuery, key: string | null, signal?: AbortSignal, opts: { track?: boolean } = {}): Promise<Connection | null> {
   const list = await getConnections({ ...toConnectionsRequest(q), limit: 4, track: opts.track }, signal);
+  rememberConnections(list);
   return list.find((c) => connectionKey(c) === key) ?? list[0] ?? null;
 }
 
@@ -81,6 +99,24 @@ export function stitch(planned: Connection, onward: Connection, at: number): Con
     disruptions: [...(planned.disruptions ?? []), ...(onward.disruptions ?? [])],
     fareRef: undefined,
   };
+}
+
+/** Re-routed trips built from the cache, so asking twice gives the same object (safe to render and use as an effect dependency). */
+const stitched = new Map<string, { planned: Connection; onward: Connection; trip: Connection }>();
+
+/** The connection a detail URL describes, if it was already seen this session (see loadConnection). */
+export function cachedConnection(sp: URLSearchParams): Connection | null {
+  const planned = seen.get(sp.get("key") ?? "");
+  const r = rerouteFromSearchParams(sp);
+  if (!planned || !r) return planned ?? null;
+  const onward = seen.get(r.key);
+  if (!onward) return null;
+  const k = `${sp.get("key")}|${r.key}|${r.at}`;
+  const hit = stitched.get(k);
+  if (hit?.planned === planned && hit.onward === onward) return hit.trip;
+  const trip = stitch(planned, onward, r.at);
+  stitched.set(k, { planned, onward, trip });
+  return trip;
 }
 
 /** Fetch the connection a detail URL describes, re-routed if it carries r* params. */

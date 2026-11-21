@@ -4,8 +4,11 @@ import { Card, Skeleton, cn } from "./ui";
 
 /**
  * Placeholders shaped like the content they stand in for, so the page keeps
- * its layout while connections and prices load. Each is hidden from screen
- * readers; the wrapper carries a single "Loading" status instead.
+ * its layout while it loads. Only for content that is certain to come and
+ * whose shape is known: anything already known is rendered for real, and
+ * results that may not exist (a cheaper departure, say) get a status line
+ * instead. Each is hidden from screen readers; the wrapper carries a single
+ * "Loading" status.
  */
 
 function Loading({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
@@ -35,13 +38,14 @@ export function ConnectionCardSkeleton({ price = true }: { price?: boolean }) {
         <Skeleton className="h-[15px] w-[46px]" />
         <Skeleton className="ml-[5.5px] h-[13px] w-[110px]" />
       </div>
-      <div className="mt-[8.5px] grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2">
+      {/* Row heights follow the card's text lines (times, then duration), so the list doesn't grow when it loads. */}
+      <div className="mt-[8.5px] grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
         <Skeleton className="h-[15px] w-[40px]" />
-        <div className="relative h-5">
-          <span className="absolute top-1/2 right-0 left-0 h-[1.5px] -translate-y-1/2 animate-pulse bg-fg/10 motion-reduce:animate-none" />
+        <div className="relative h-[23.25px]">
+          <span className="absolute top-1/2 right-0 left-0 h-[1.5px] -translate-y-1/2 skeleton bg-fg/10" />
         </div>
         <Skeleton className="h-[15px] w-[40px]" />
-        <div className="col-start-2 flex items-center justify-between">
+        <div className="col-start-2 flex h-6 items-center justify-between">
           <Skeleton className="h-[12px] w-[96px]" />
           <Skeleton className="h-[13px] w-[48px]" />
         </div>
@@ -53,6 +57,13 @@ export function ConnectionCardSkeleton({ price = true }: { price?: boolean }) {
 export function ConnectionListSkeleton({ count = 4, price = true }: { count?: number; price?: boolean }) {
   return (
     <Loading label="Loading connections" className="mt-px space-y-1.25 px-[8.5px] lg:px-0">
+      {/* With prices on, the "Cheapest times" row (see CheaperNearby) comes first: keep its place, so the cards land where their placeholders were. */}
+      {price && (
+        <div aria-hidden className="flex h-10 items-center gap-3 rounded-[19px] bg-surface px-[15px]">
+          <Skeleton className="size-5 shrink-0 rounded-full" />
+          <Skeleton className="h-[13px] w-[150px]" />
+        </div>
+      )}
       {Array.from({ length: count }, (_, i) => (
         <ConnectionCardSkeleton key={i} price={price} />
       ))}
@@ -60,74 +71,42 @@ export function ConnectionListSkeleton({ count = 4, price = true }: { count?: nu
   );
 }
 
-/** A "Leave 9 min later, save CHF 7.40" suggestion (see CheaperNearby). */
-export function CheaperRowSkeleton() {
-  return (
-    <div role="status" aria-label="Looking for cheaper departures" className="flex items-center gap-3 px-[15px] py-3">
-      <Skeleton className="size-5 shrink-0 rounded-full" />
-      <span className="min-w-0 flex-1 space-y-1.5">
-        <Skeleton className="h-[14px] w-[62%]" />
-        <Skeleton className="h-[12px] w-[44%]" />
-      </span>
-    </div>
-  );
-}
-
-/** A departure on the whole-day price list (see DayPrices). */
-export function DayPriceRowSkeleton() {
-  return (
-    <li aria-hidden className="flex items-center gap-3 px-[15px] py-2.5">
-      <span className="min-w-0 flex-1 space-y-1.5">
-        <Skeleton className="h-[14px] w-[104px]" />
-        <Skeleton className="h-[12px] w-[60%]" />
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-1.5">
-        <Skeleton className="h-[14px] w-[72px]" />
-        <Skeleton className="h-[11px] w-[54px]" />
-      </span>
-    </li>
-  );
-}
-
-/** A connection's itinerary card (see Itinerary on the detail page). */
-export function ItinerarySkeleton() {
-  const stop = (w: string) => (
+/**
+ * A connection's itinerary card (see Itinerary on the detail page) before the
+ * connection has loaded: the start and destination are known from the search,
+ * the times, platforms and what runs in between are not.
+ */
+export function ItinerarySkeleton({ from, to }: { from: string; to: string }) {
+  const stop = (name: string) => (
     <>
-      <Skeleton className="h-[15px] w-[40px]" />
+      <Skeleton className="mt-[2.5px] h-[15px] w-[40px]" />
       <span className="flex justify-center pt-[3px]">
-        <span className="size-3.5 animate-pulse rounded-full border-[3px] border-fg/15 motion-reduce:animate-none" />
+        <span className="size-3.5 rounded-full border-[3px] border-fg/30" />
       </span>
-      <div className="flex items-start justify-between gap-2 pl-3">
-        <Skeleton className={cn("h-[15px]", w)} />
-        <Skeleton className="h-[13px] w-[38px]" />
-      </div>
-    </>
-  );
-  const leg = (
-    <>
-      <span />
-      <span className="flex justify-center">
-        <span className="w-[3px] animate-pulse bg-fg/10 motion-reduce:animate-none" />
-      </span>
-      <div className="space-y-2 py-4 pl-3">
-        <div className="flex items-center gap-1.75">
-          <Skeleton className="size-5 rounded-[1.5px]" />
-          <Skeleton className="h-[15px] w-[46px]" />
-          <Skeleton className="ml-auto h-[12px] w-[70px]" />
-        </div>
-        <Skeleton className="h-[13px] w-[52%]" />
+      <div className="flex items-start justify-between gap-2 pl-3 leading-5">
+        <span className="min-w-0 font-bold">{name}</span>
+        <Skeleton className="mt-[3.5px] h-[13px] w-[38px] shrink-0" />
       </div>
     </>
   );
   return (
     <Loading label="Loading connection" className="mt-4 px-[8.5px]">
       <Card className="overflow-hidden">
-        <div aria-hidden className="grid grid-cols-[49.5px_20px_minmax(0,1fr)] px-[15px] py-[15px]">
-          {stop("w-[58%]")}
-          {leg}
-          {stop("w-[46%]")}
-          {leg}
-          {stop("w-[52%]")}
+        <div className="grid grid-cols-[49.5px_20px_minmax(0,1fr)] px-[15px] py-[15px] text-[16px] tracking-tight">
+          {stop(from)}
+          <span />
+          <span className="flex justify-center">
+            <span className="w-[3px] skeleton bg-fg/10" />
+          </span>
+          <div aria-hidden className="space-y-2 py-4 pl-3">
+            <div className="flex items-center gap-1.75">
+              <Skeleton className="size-5 rounded-[1.5px]" />
+              <Skeleton className="h-[15px] w-[46px]" />
+              <Skeleton className="ml-auto h-[12px] w-[70px]" />
+            </div>
+            <Skeleton className="h-[13px] w-[52%]" />
+          </div>
+          {stop(to)}
         </div>
       </Card>
     </Loading>
@@ -148,9 +127,9 @@ export function OtherConnectionSkeleton() {
 }
 
 /** The ticket offers while the connection and its price load (see OffersView). */
-export function OffersSkeleton() {
+export function OffersSkeleton({ className }: { className?: string }) {
   return (
-    <Loading label="Loading prices" className="mt-4.25 px-[8.5px]">
+    <Loading label="Loading offers" className={cn("mt-4.25 px-[8.5px]", className)}>
       <Card className="overflow-hidden">
         <div className="flex gap-2.5 px-[15px] pt-[14.5px] pb-3.5">
           <Skeleton className="size-[19px] shrink-0 rounded-full" />
