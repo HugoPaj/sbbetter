@@ -112,8 +112,11 @@ export default function TicketsPage() {
                   </button>
                   <div className="relative w-[37.7%] overflow-hidden rounded-t-[2.5px] bg-gradient-to-b from-[#f2f2f2] to-[#dcdcdc]">
                     <svg viewBox="0 0 80 100" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 size-full" aria-label="Photo placeholder">
-                      <circle cx="40" cy="42" r="17" fill="#b9bcc4" />
-                      <path d="M6 100c2-22 16-32 34-32s32 10 34 32z" fill="#9aa0ad" />
+                      <path d="M3 100c1-20 13-28 26-30h22c13 2 25 10 26 30z" fill="#56627f" />
+                      <path d="M29 70l11 13 11-13z" fill="#f4f5f7" />
+                      <rect x="33" y="54" width="14" height="21" rx="6" fill="#cf9c7d" />
+                      <ellipse cx="40" cy="42" rx="16" ry="18" fill="#e2b193" />
+                      <path d="M23 43q-3-24 17-24t17 24q-5-12-17-12t-17 12z" fill="#4a3226" />
                     </svg>
                   </div>
                 </div>
