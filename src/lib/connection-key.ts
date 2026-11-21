@@ -45,6 +45,9 @@ export function rememberConnections(list: Connection[]) {
   for (const c of list) {
     const k = connectionKey(c);
     const old = seen.get(k);
+    // Same trip: keep pricing it by the ref it was first priced under, so a refresh doesn't
+    // send its price back to "loading" (and spend the fare API's quota on it again).
+    if (old?.fareRef && c.fareRef) c.fareRef = old.fareRef;
     if (!old || !tracked(old) || tracked(c)) seen.set(k, c);
   }
 }

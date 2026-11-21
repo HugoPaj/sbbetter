@@ -29,15 +29,47 @@ export const viewport: Viewport = {
 const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){}`;
 
 /**
- * Installed on an iPhone home screen (`navigator.standalone`), works around two WebKit bugs
- * (see `--chin` / `--safe-top` in globals.css):
- *  - 100dvh ends above the home indicator, leaving a black bar: measure the shortfall against
- *    the physical screen (capped at the home-indicator inset) and publish it as --chin.
- *  - env(safe-area-inset-top) reads 0 under the frosted status bar: fall back to the status
- *    bar height (59pt Dynamic Island, 47pt notch).
- * Screen sizes are in points; the layout viewport is fixed at 393px, so k converts pt -> CSS px.
+ * Installed on an iPhone home screen, works around two WebKit bugs (iOS 26+). The page is
+ * full-screen there, so instead of trusting the browser's measurements we size it from the
+ * physical screen (in points; the layout viewport is fixed at 393px, so k converts pt -> CSS px):
+ *  - --app-h: the screen height. 100dvh, 100% and the fixed-position frame can all end ~34pt
+ *    above the home indicator, which leaves a black bar (globals.css stretches html/body to it).
+ *  - --safe-top: env(safe-area-inset-top) can read 0 (or arrive late) while the status bar
+ *    still covers the page, so never go below the status bar height (59pt Dynamic Island,
+ *    47pt notch, 20pt home button).
+ * Re-runs after load/resize because the first values iOS reports while parsing can be wrong.
+ * Add `?vp` to the URL to show the measured values on the device (`?vp=0` hides them again).
  */
-const IOS_PWA_SCRIPT = `(function(){if(navigator.standalone!==true)return;var d=document.documentElement;function fix(){var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;var w=Math.min(screen.width,screen.height),h=Math.max(screen.width,screen.height);if(innerWidth>innerHeight)return;var k=innerWidth/w,p=document.createElement("div");p.style.cssText="position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100dvh;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";document.body.appendChild(p);var c=getComputedStyle(p),top=parseFloat(c.paddingTop)||0,bot=parseFloat(c.paddingBottom)||0,dvh=parseFloat(c.height)||0;p.remove();var chin=Math.round(Math.min(h*k-dvh,Math.max(bot,34*k)));if(chin>1){d.style.setProperty("--chin",chin+"px");d.dataset.chin=""}else{d.style.removeProperty("--chin");delete d.dataset.chin}if(top<1&&h/w>2)d.style.setProperty("--safe-top",Math.round((h>=852?59:47)*k)+"px");else d.style.removeProperty("--safe-top")}fix();addEventListener("resize",fix);addEventListener("pageshow",fix)})()`;
+const IOS_PWA_SCRIPT = `(function(){
+var d=document.documentElement,n=navigator;
+try{var q=location.search.match(/[?&]vp(=0)?\\b/);if(q)localStorage.setItem("sbb-vp",q[1]?"":"1")}catch(e){}
+var debug=false;try{debug=localStorage.getItem("sbb-vp")==="1"}catch(e){}
+var ios=/iP(hone|od|ad)/.test(n.userAgent)||(n.platform==="MacIntel"&&n.maxTouchPoints>1);
+var app=n.standalone===true||matchMedia("(display-mode: standalone)").matches||matchMedia("(display-mode: fullscreen)").matches;
+if(!(ios&&app)&&!debug)return;
+var info={};
+function fix(){
+  var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  var w=Math.min(screen.width,screen.height),h=Math.max(screen.width,screen.height),vw=d.clientWidth||innerWidth;
+  var p=document.createElement("div");
+  p.style.cssText="position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100dvh;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
+  document.body.appendChild(p);var c=getComputedStyle(p),top=parseFloat(c.paddingTop)||0,bot=parseFloat(c.paddingBottom)||0,dvh=parseFloat(c.height)||0;p.remove();
+  var k=vw/w,portrait=!matchMedia("(orientation: landscape)").matches;
+  info={standalone:n.standalone,app:app,screen:w+"x"+h,inner:innerWidth+"x"+innerHeight,client:d.clientWidth+"x"+d.clientHeight,dvh:dvh,envTop:top,envBottom:bot,k:k.toFixed(3),portrait:portrait};
+  if(ios&&app&&portrait&&w>0){
+    var full=Math.round(h*k),bar=h/w>2?(h>=852?59:47):20;
+    d.style.setProperty("--app-h",Math.max(full,Math.round(dvh))+"px");
+    d.style.setProperty("--safe-top",Math.round(Math.max(top,bar*k))+"px");
+    d.dataset.iosApp="";
+  }else{d.style.removeProperty("--app-h");d.style.removeProperty("--safe-top");delete d.dataset.iosApp}
+  info.appH=d.style.getPropertyValue("--app-h");info.safeTop=d.style.getPropertyValue("--safe-top");
+  if(debug){var b=document.getElementById("vp-debug");if(!b){b=document.createElement("pre");b.id="vp-debug";b.style.cssText="position:fixed;left:8px;top:45%;z-index:99999;margin:0;padding:6px 8px;font:11px/1.35 ui-monospace,monospace;color:#0f0;background:rgba(0,0,0,.85);border-radius:6px;pointer-events:none;white-space:pre";document.body.appendChild(b)}b.textContent=JSON.stringify(info,null,1).replace(/[{}"]/g,"").trim()}
+}
+fix();
+["DOMContentLoaded","load","pageshow","resize","orientationchange"].forEach(function(e){addEventListener(e,fix)});
+if(window.visualViewport)visualViewport.addEventListener("resize",fix);
+setTimeout(fix,300);setTimeout(fix,1500);
+})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

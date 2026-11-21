@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Plus, X } from "lucide-react";
 import { CURRENT_LOCATION, type Endpoint } from "@/lib/use-position";
 import { actions, useAppState } from "@/lib/store";
@@ -53,6 +53,62 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
 
+  // Swipe from one tile to another: start tile = departure, release tile = destination.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: number; start: Endpoint; x0: number; y0: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const [line, setLine] = useState<{ start: Endpoint; x1: number; y1: number; x2: number; y2: number; over: Endpoint | null } | null>(null);
+
+  const endpointAt = (x: number, y: number): { ep: Endpoint; el: HTMLElement } | null => {
+    const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-tt-id]");
+    if (!el || !wrapRef.current?.contains(el)) return null;
+    return { ep: { id: el.dataset.ttId!, name: el.dataset.ttName! }, el };
+  };
+
+  const epOf = (el: HTMLElement): Endpoint => ({ id: el.dataset.ttId!, name: el.dataset.ttName! });
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    if (editing || e.button !== 0) return;
+    suppressClick.current = false;
+    drag.current = { id: e.pointerId, start: epOf(e.currentTarget), x0: e.clientX, y0: e.clientY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    const wrap = wrapRef.current;
+    if (!d || d.id !== e.pointerId || !wrap) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 10) return;
+    d.moved = true;
+    const box = wrap.getBoundingClientRect();
+    const src = e.currentTarget.getBoundingClientRect();
+    const hit = endpointAt(e.clientX, e.clientY);
+    const over = hit && hit.ep.id !== d.start.id ? hit : null;
+    const tgt = over?.el.getBoundingClientRect();
+    setLine({
+      start: d.start,
+      over: over?.ep ?? null,
+      x1: src.left + src.width / 2 - box.left,
+      y1: src.top + src.height / 2 - box.top,
+      x2: (tgt ? tgt.left + tgt.width / 2 : e.clientX) - box.left,
+      y2: (tgt ? tgt.top + tgt.height / 2 : e.clientY) - box.top,
+    });
+  };
+  const onPointerUp = (e: ReactPointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    setLine(null);
+    if (!d || d.id !== e.pointerId || !d.moved) return;
+    // A drag never counts as a tap, even if it ends where it started.
+    suppressClick.current = true;
+    const hit = endpointAt(e.clientX, e.clientY);
+    if (hit && hit.ep.id !== d.start.id) onSearch(d.start, hit.ep);
+  };
+  const onPointerCancel = () => {
+    drag.current = null;
+    setLine(null);
+  };
+  const dragProps = { onPointerDown, onPointerMove, onPointerUp, onPointerCancel };
+
   const pick = (e: Endpoint) => {
     if (mode === "from") {
       setFrom(e);
@@ -64,19 +120,23 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
 
   return (
     <Overlap className={DESK_COL}>
-      <div className="overflow-hidden rounded-[19px]">
+      <div ref={wrapRef} className="relative overflow-hidden rounded-[19px] select-none">
         <div className="grid grid-cols-2 gap-[3px] lg:grid-cols-4">
           {favourites.map((f, i) => (
             <button
               key={f.id}
+              data-tt-id={f.id}
+              data-tt-name={f.id}
+              {...dragProps}
               aria-label={editing ? `Remove ${f.id}` : undefined}
               onClick={() => {
+                if (suppressClick.current) return void (suppressClick.current = false);
                 if (!editing) return pick({ id: f.id, name: f.id });
                 actions.set({ favourites: favourites.filter((x) => x.id !== f.id) });
               }}
               className={cn(
-                "relative h-[84px] overflow-hidden bg-gradient-to-br from-[#3a4466] via-[#2a3250] to-[#1d2440] px-3 pb-2.5 text-left text-white",
-                from.id === f.id && "ring-2 ring-sbb-red ring-inset",
+                "relative h-[84px] touch-none overflow-hidden bg-gradient-to-br from-[#3a4466] via-[#2a3250] to-[#1d2440] px-3 pb-2.5 text-left text-white",
+                (line ? line.start.id === f.id || line.over?.id === f.id : from.id === f.id) && "ring-2 ring-sbb-red ring-inset",
               )}
             >
               <MapLines seed={i + 1} />
@@ -100,11 +160,18 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
         </div>
         <div className="mt-[3px] grid grid-cols-4 gap-[3px] text-[16px] font-light tracking-tight">
           <button
+            data-tt-id={CURRENT_LOCATION}
+            data-tt-name="Current location"
+            {...dragProps}
             onClick={() => {
+              if (suppressClick.current) return void (suppressClick.current = false);
               setFrom({ id: CURRENT_LOCATION, name: "Current location" });
               setMode("to");
             }}
-            className="col-span-2 flex h-[94px] flex-col justify-end gap-[7px] bg-surface px-3 pb-2 text-left"
+            className={cn(
+              "col-span-2 flex h-[94px] touch-none flex-col justify-end gap-[7px] bg-surface px-3 pb-2 text-left",
+              line && (line.start.id === CURRENT_LOCATION || line.over?.id === CURRENT_LOCATION) && "ring-2 ring-sbb-red ring-inset",
+            )}
           >
             <TargetIcon className="size-6" strokeWidth={1.25} />
             Current location
@@ -126,10 +193,21 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
             to
           </button>
         </div>
+        {line && (
+          <svg aria-hidden className="pointer-events-none absolute inset-0 size-full">
+            <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="var(--color-sbb-red, #eb0000)" strokeWidth={4} strokeLinecap="round" />
+            <circle cx={line.x1} cy={line.y1} r={7} fill="#fff" stroke="var(--color-sbb-red, #eb0000)" strokeWidth={3} />
+            <circle cx={line.x2} cy={line.y2} r={line.over ? 9 : 6} fill="var(--color-sbb-red, #eb0000)" stroke="#fff" strokeWidth={2} />
+          </svg>
+        )}
       </div>
       <div className="mt-[21.5px] flex items-center justify-between gap-2.5 pl-[3.5px]">
         <p className="text-[12px] font-light text-muted">
-          {editing ? "Tap a tile to remove it, or add a new stop" : mode === "from" ? "Tap a tile to set the departure" : `From ${from.name} — tap a destination`}
+          {editing ? "Tap a tile to remove it, or add a new stop" : mode === "from" ? "Tap a tile to set the departure" : line
+              ? line.over
+                ? `${line.start.name} → ${line.over.name}`
+                : `From ${line.start.name} — release on a destination`
+              : `From ${from.name} — tap a destination, or swipe from one tile to another`}
         </p>
         <button
           onClick={() => setEditing((e) => !e)}

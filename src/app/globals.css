@@ -38,15 +38,24 @@
    */
   --home-inset: max(env(safe-area-inset-bottom), 34px);
   /*
-   * iOS 26+ home-screen web app workarounds, set by IOS_PWA_SCRIPT in layout.tsx:
-   * --chin is how far 100dvh stops short of the physical bottom (WebKit leaves a black
-   * bar there); --safe-top replaces env(safe-area-inset-top), which WebKit reports as 0
-   * while the frosted status bar still covers the page (bug 301994).
+   * iOS 26+ home-screen web app workarounds: IOS_PWA_SCRIPT in layout.tsx overrides these
+   * inline with values taken from the physical screen. --app-h replaces 100dvh (which can stop
+   * short of the bottom, leaving a black bar); --safe-top replaces env(safe-area-inset-top)
+   * (which can read 0 while the status bar still covers the page, WebKit bug 301994).
    */
-  --chin: 0px;
   --safe-top: env(safe-area-inset-top);
   /* Full screen height on phones; use instead of 100dvh. */
-  --app-h: calc(100dvh + var(--chin));
+  --app-h: 100dvh;
+}
+
+/* First paint on an installed iPhone app, before IOS_PWA_SCRIPT runs: keep headers clear of the
+   status bar even if env() reads 0. (-webkit-touch-callout only exists on iOS.) */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) and (max-aspect-ratio: 1/2) {
+    :root {
+      --safe-top: max(env(safe-area-inset-top), 47px);
+    }
+  }
 }
 
 /* Light mode: `data-theme` is set on <html> before first paint (see layout.tsx and lib/theme.ts). */
@@ -87,14 +96,15 @@ body {
     overscroll-behavior: none;
   }
 
-  /* Installed on iOS with a short viewport: stretch the document over the black bar, and make
-     <body> the frame for every `position: fixed` element (tab bar, bottom panels, sheets, toasts)
-     so `bottom: 0` lands on the physical screen edge instead of the short viewport's. */
-  :root[data-chin],
-  :root[data-chin] body {
+  /* Installed on iOS: stretch the document to the full screen height, and make <body> the frame
+     for every `position: fixed` element (tab bar, bottom panels, sheets, toasts) so `bottom: 0`
+     lands on the physical screen edge instead of above the home indicator. */
+  :root[data-ios-app],
+  :root[data-ios-app] body {
     height: var(--app-h);
+    min-height: var(--app-h);
   }
-  :root[data-chin] body {
+  :root[data-ios-app] body {
     transform: translate(0);
   }
 }

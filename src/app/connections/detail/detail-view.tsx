@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useNow } from "@/lib/use-now";
 import { useRouter, useSearchParams } from "next/navigation";
 import { flushSync } from "react-dom";
 import { ArrowRightLeft, CalendarPlus, ChevronDown, ChevronRight, EllipsisVertical, FlaskConical, Share2, Star, Ticket, TriangleAlert } from "lucide-react";
@@ -10,7 +11,7 @@ import { DepartureBoard } from "@/components/plan/departure-board";
 import { RouteMap } from "@/components/plan/route-map";
 import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
 import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
-import { Capacity, DelayForecast, LineLabel, ModeBadge, useForecast } from "@/components/journey";
+import { Capacity, DelayLabel, LineLabel, ModeBadge, delayNote, useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
@@ -52,18 +53,6 @@ function icsOf(conn: Connection, title: string, description: string): string {
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
-}
-
-/** The current time in seconds, in 30 s steps so the timeline advances live (null on the server). */
-function useNow(): number | null {
-  return useSyncExternalStore(
-    (tick) => {
-      const id = setInterval(tick, 5000);
-      return () => clearInterval(id);
-    },
-    () => Math.floor(Date.now() / 30000) * 30,
-    () => null,
-  );
 }
 
 export function DetailView() {
@@ -141,14 +130,16 @@ export function DetailView() {
   const saved = trips.some((t) => t.id === tripId);
   const fare = conn ? priceOf(conn) : null;
   const price = fare?.secondClass ?? null;
-  // What a travelcard changes about the ticket; not while a disruption says to take another route.
-  const pass = !verdict?.alternative ? fare?.pass : undefined;
   /**
    * The traveller's own trip needs no ticket: only upgrades and tickets for people travelling along are left to sell.
    * Known from the travelcards alone, before any price has loaded.
    */
   const coverage = conn ? coverageOf(conn, passes) : null;
   const covered = fare ? !!fare.pass && price === 0 : !!coverage?.pass && coverage.parts.length === 0;
+  // What a travelcard changes about the ticket; not while a disruption says to take another route.
+  // A trip the card covers entirely is known before its price: the notice is there from the start
+  // and only the saving fills in. Partly covered trips wait for prices, which may rule the card out.
+  const pass = verdict?.alternative ? undefined : (fare?.pass ?? (!fare && covered && coverage?.pass ? { name: coverage.pass, several: coverage.several, tickets: [], through: null } : undefined));
   const offersHref = journeyHref("/offers", query, { key: key ?? "", ...rParams });
   const fromLabel = query.fromName === "Current location" ? "Your chosen location" : query.fromName;
   const walk = conn?.accessWalk?.minutes ?? query.walkMinutes;
@@ -391,7 +382,7 @@ export function DetailView() {
                   {checking && <p className="text-[14.5px] font-light text-muted">Checking your journey…</p>}
                   {verdict && <VerdictBanner verdict={verdict} />}
                   {!!conn.disruptions?.length && <DisruptionNotices disruptions={conn.disruptions} />}
-                  {pass && <PassNotice pass={pass} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
+                  {pass && <PassNotice pass={pass} pricing={!fare} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
                 </>
               ) : null
             }
@@ -584,14 +575,19 @@ function StopButton({ checkpoint, onStop, className }: { checkpoint: Checkpoint;
 const GRID = "grid grid-cols-[49.5px_20px_minmax(0,1fr)]";
 
 /** What the traveller's travelcard means for this trip's ticket, at the head of the timeline. */
-function PassNotice({ pass, trip }: { pass: PassSaving; trip: { from: string | null; to: string | null } }) {
+function PassNotice({ pass, pricing, trip }: { pass: PassSaving; /** The saving is still being priced. */ pricing: boolean; trip: { from: string | null; to: string | null } }) {
   const { headline, detail } = passNotice(pass, trip);
+  // Holds the place of "You save CHF …" so the notice doesn't grow when the price arrives.
+  const saving = pricing && <Skeleton className="inline-block h-[11px] w-[104px] align-middle" />;
   return (
     <div className="flex items-start gap-2.5">
       <Ticket className="mt-px size-4.5 shrink-0 text-ok" strokeWidth={2} />
       <div className="min-w-0 flex-1">
         <p className="text-[14.5px] leading-snug font-bold">{headline}</p>
-        <p className="mt-0.5 text-[13px] leading-snug font-light text-fg/80">{detail}</p>
+        <p className="mt-0.5 text-[13px] leading-snug font-light text-fg/80">
+          {detail}
+          {saving}
+        </p>
       </div>
     </div>
   );
@@ -654,7 +650,7 @@ type Leg =
       status?: LegStatus;
       /** Shown under the boarding stop. */ depNote?: Note;
       /** Replacement shown in place of this leg. */ instead?: ReactNode;
-      /** Delay model forecast for the arrival, minutes (see DelayForecast). */ forecast?: number;
+      /** Delay model forecast for the arrival, minutes (see delayNote). */ forecast?: number;
     }
   | {
       kind: "walk";
@@ -680,9 +676,13 @@ type Node = {
   arrLate?: string;
   /** Show `arrLate` in red (a delay), not as a calm new time (a new plan). */
   delayed?: boolean;
-  /** Delay model forecast for the arrival, minutes; only without a known delay. */
+  /** Where a ride arrives, for its live or forecast delay (see delayNote); not when a simulated delay says otherwise. */
+  arrCp?: Checkpoint;
+  /** Delay model forecast for the arrival, minutes. */
   forecast?: number;
   dep?: string;
+  /** Where a ride leaves from, for its live delay. */
+  depCp?: Checkpoint;
   /** The ride leaving from here won't be taken (cancelled or missed). */
   depGone?: boolean;
   arrPl?: string | null;
@@ -720,6 +720,7 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
   const place = (n: Node) => {
     if (last && (last.key === n.key || last.name === n.name) && !(last.sentinel && n.dep)) {
       last.dep ??= n.dep;
+      last.depCp ??= n.depCp;
       last.depPl ??= n.depPl;
       last.depGone ||= n.depGone;
       last.pill ??= n.pill;
@@ -736,11 +737,11 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
       const { section: s, status } = leg;
       const cat = s.journey!.category;
       const pill = status?.kind === "cancelled" ? "Cancelled" : status?.kind === "missed" ? "Missed" : undefined;
-      place({ key: keyOf(s.departure), name: s.departure.station.name ?? "", checkpoint: s.departure, dep: formatTime(s.departure.departure), depGone: !!pill, pill, note: leg.depNote, depPl: platformLabel(s.departure.prognosis?.platform ?? s.departure.platform, cat) });
+      place({ key: keyOf(s.departure), name: s.departure.station.name ?? "", checkpoint: s.departure, dep: formatTime(s.departure.departure), depCp: pill ? undefined : s.departure, depGone: !!pill, pill, note: leg.depNote, depPl: platformLabel(s.departure.prognosis?.platform ?? s.departure.platform, cat) });
       items.push({ type: "leg", leg });
       last = null;
       const late = status?.kind === "late" && s.arrival.arrivalTimestamp ? formatTime(new Date((s.arrival.arrivalTimestamp + status.minutes * 60) * 1000).toISOString()) : undefined;
-      place({ key: keyOf(s.arrival), name: s.arrival.station.name ?? "", checkpoint: s.arrival, arr: formatTime(s.arrival.arrival), arrLate: late, delayed: !!late, forecast: late ? undefined : leg.forecast, pill: late && `+${(status as { minutes: number }).minutes} min late`, arrPl: platformLabel(s.arrival.prognosis?.platform ?? s.arrival.platform, cat) });
+      place({ key: keyOf(s.arrival), name: s.arrival.station.name ?? "", checkpoint: s.arrival, arr: formatTime(s.arrival.arrival), arrLate: late, delayed: !!late, arrCp: late ? undefined : s.arrival, forecast: leg.forecast, pill: late && `+${(status as { minutes: number }).minutes} min late`, arrPl: platformLabel(s.arrival.prognosis?.platform ?? s.arrival.platform, cat) });
     } else {
       if (!leg.minutes && (!leg.from || !leg.to || keyOf(leg.from) === keyOf(leg.to))) continue;
       if (leg.start) place({ key: "origin", name: leg.start.name, dep: leg.start.time });
@@ -874,14 +875,29 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
           const reached = i > 0 ? done[i - 1] === 1 : !!next && now !== null && now >= next.t0;
           // Waiting here: the next leg has not started (or never will).
           const here = reached && !!next && done[i + 1] === 0;
+          // The ride from here has left.
+          const left = !!next && now !== null && now >= next.t0;
           // Boarding a missed/cancelled ride, or anywhere after it: no longer part of the trip.
           const off = brokenAt >= 0 && i >= brokenAt - 1;
           return (
             <Fragment key={i}>
-              <span className={cn("col-start-1 leading-5 tabular-nums", off && "text-muted")} style={{ ...row, ...vt(i, "time") }}>
+              <span className={cn("relative col-start-1 leading-5 tabular-nums", off && "text-muted")} style={{ ...row, ...vt(i, "time") }}>
                 {n.arr && <span className={cn("block tracking-[-0.03em]", n.arrLate ? "font-light text-muted line-through decoration-1" : change ? "font-light" : "font-bold")}>{n.arr}</span>}
                 {n.arrLate && <span className={cn("block font-bold tracking-[-0.04em]", n.delayed && "text-sbb-red")}>{n.arrLate}</span>}
-                <DelayForecast minutes={n.forecast} className="block leading-4" />
+                {/* Delays sit in the empty time column of their own ride: the arrival's just above the
+                    time, in the ride leading here; the departure's just below, in the ride leaving.
+                    They take no room, so nothing moves when a forecast loads. Once a moment has
+                    passed it shows what happened, never a forecast (see delayNote). */}
+                {n.arrCp && (
+                  <span className="absolute bottom-full left-0 mb-0.5 leading-4">
+                    <DelayLabel note={delayNote(n.arrCp, "arrival", { forecast: n.forecast, past: reached })} />
+                  </span>
+                )}
+                {n.depCp && (
+                  <span className="absolute top-full left-0 mt-0.5 leading-4">
+                    <DelayLabel note={delayNote(n.depCp, "departure", { past: left })} />
+                  </span>
+                )}
                 {n.dep && <span className={cn("block font-bold tracking-[-0.04em]", n.depGone && "text-muted")}>{n.dep}</span>}
                 {!n.arr && !n.dep && n.at && <span className="block font-bold tracking-[-0.04em]">{n.at}</span>}
               </span>
