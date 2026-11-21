@@ -1,4 +1,5 @@
 import { TRANSPORT_FILTERS, type ConnectionsRequest, type TransportFilter } from "./transport";
+import { zurichDateTime } from "./format";
 
 /**
  * The journey search lives in the URL so every screen (connections, detail,
@@ -76,5 +77,25 @@ export function toConnectionsRequest(q: JourneyQuery): ConnectionsRequest {
     time: q.time || undefined,
     isArrivalTime: q.isArrivalTime,
     transportations: q.transportations.length ? q.transportations : undefined,
+  };
+}
+
+/** Next connections for one direction of the commuter route, at its usual time (tomorrow once today's has passed). */
+export function commuteQuery(
+  c: { from: string; fromName: string; to: string; toName: string; outTime: string; backTime: string },
+  back: boolean,
+): JourneyQuery {
+  const now = zurichDateTime();
+  const time = back ? c.backTime : c.outTime;
+  const date = time < now.time ? zurichDateTime(new Date(Date.now() + 24 * 3600 * 1000)).date : now.date;
+  return {
+    from: back ? c.to : c.from,
+    fromName: back ? c.toName : c.fromName,
+    to: back ? c.from : c.to,
+    toName: back ? c.fromName : c.toName,
+    date,
+    time,
+    isArrivalTime: false,
+    transportations: [],
   };
 }

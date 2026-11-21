@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Funnel, Layers, MapPin, Navigation } from "lucide-react";
-import { Card, Checkbox, Header, OutlineButton, Overlap, PrimaryButton, Radio, Segmented, Sheet, Toggle, cn, toast } from "@/components/ui";
-import { BoardIcon, MapSearchIcon, StopIcon, TargetIcon } from "@/components/icons";
-import { JourneyMap, MAP_STYLES, STOP_MODES, type MapStyleId } from "@/components/plan/journey-map";
-import { ModeBadge } from "@/components/journey";
+import { ArrowLeftRight, Briefcase, ChevronRight, House, RotateCcw } from "lucide-react";
+import { Card, DESK_COL, Header, Overlap, Segmented, cn, toast } from "@/components/ui";
+import { BoardIcon, LongArrow, StopIcon, TargetIcon } from "@/components/icons";
 import { LocationPicker } from "@/components/plan/location-picker";
 import { DepartureBoard } from "@/components/plan/departure-board";
 import { TouchTimetable } from "@/components/plan/touch-timetable";
+import { CommuteSetup } from "@/components/commute";
 import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint } from "@/lib/use-position";
-import { journeyHref } from "@/lib/journey-query";
+import { commuteQuery, journeyHref } from "@/lib/journey-query";
 import { nearbyStations } from "@/lib/transport";
-import { useTheme } from "@/lib/theme";
+import { actions, useAppState, type Commute, type SavedTrip, type Ticket } from "@/lib/store";
+import { formatChf, formatDate, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
 
 type View = "timetable" | "touch";
 
@@ -24,23 +26,8 @@ export function PlanView() {
   const [from, setFrom] = useState<Endpoint>({ id: CURRENT_LOCATION, name: "Current location" });
   const [picking, setPicking] = useState<"from" | "to" | null>(null);
   const [board, setBoard] = useState<{ id: string; name: string } | null>(null);
-  const [recenter, setRecenter] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"filter" | "layers" | null>(null);
-  // The base map follows the theme until one is picked under "Map layers".
-  const theme = useTheme();
-  const [pickedStyle, setMapStyle] = useState<MapStyleId | null>(null);
-  const mapStyle = pickedStyle ?? theme;
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const [showStops, setShowStops] = useState(true);
-  /** "Pick on map": the crosshair in the middle of the map chooses the place. */
-  const [pickOnMap, setPickOnMap] = useState(false);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number } | null>(null);
-  const pickedPoint = (): Endpoint => {
-    const c = mapCenter ?? pos;
-    return { id: `coord:${c.lat.toFixed(5)},${c.lon.toFixed(5)}`, name: "Selected location" };
-  };
 
   async function search(f: Endpoint, t: Endpoint) {
     setBusy(true);
@@ -65,7 +52,7 @@ export function PlanView() {
   }
 
   return (
-    <div className={view === "timetable" ? "flex h-(--app-h) flex-col overflow-hidden" : "flex min-h-(--app-h) flex-col"}>
+    <div className="flex min-h-(--app-h) flex-col">
       <Header title="Plan" extend>
         <Segmented
           value={view}
@@ -78,21 +65,9 @@ export function PlanView() {
       </Header>
 
       {view === "timetable" ? (
-        <div className="group relative min-h-0 flex-1">
-          <JourneyMap
-            center={pos}
-            showSelf
-            recenterKey={recenter}
-            onStopClick={setBoard}
-            onCenterChange={setMapCenter}
-            styleId={mapStyle}
-            hiddenModes={hidden}
-            showStops={showStops}
-          />
-
-          {/* Search card: sits on the header skirt, above the map. Desktop: a floating panel on the left. */}
-          <Overlap className="lg:w-[440px] lg:px-6">
-            <div className="flex overflow-hidden rounded-[19px] bg-surface shadow-xl shadow-black/50">
+        <>
+          <Overlap className={DESK_COL}>
+            <div className="flex overflow-hidden rounded-[19px] bg-surface shadow-xl shadow-black/50 light:shadow-black/15">
               <div className="relative min-w-0 flex-1">
                 <span aria-hidden className="absolute top-[31.5px] bottom-[31.5px] left-[21.5px] w-px bg-fg" />
                 <button onClick={() => setPicking("from")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left transition-colors hover:bg-fg/5">
@@ -106,75 +81,22 @@ export function PlanView() {
                 </button>
               </div>
               <div className="flex items-center border-l border-surface-3 px-[13.5px]">
-                <button
-                  aria-label="Pick on map"
-                  aria-pressed={pickOnMap}
-                  onClick={() => setPickOnMap((p) => !p)}
-                  className={cn("flex size-[32px] items-center justify-center rounded-full border border-fg/50", pickOnMap && "bg-fg text-page")}
-                >
-                  <MapSearchIcon className="size-5" />
+                <button aria-label="Departure board nearby" onClick={openNearestBoard} className="flex size-[32px] items-center justify-center rounded-full border border-fg/50 transition-colors hover:bg-fg/10">
+                  <BoardIcon className="size-5" />
                 </button>
               </div>
             </div>
             {error && <p className="mx-[3.5px] mt-1.75 rounded-xl bg-page/80 px-2.5 py-1.75 text-sm text-sbb-red">{error}</p>}
           </Overlap>
 
-          {/* Floating map controls */}
-          <div className="absolute top-[83px] right-[8.5px] z-10 flex flex-col gap-[8.5px] lg:top-6 lg:right-6">
-            <MapButton label="Filter" onClick={() => setSheet("filter")} active={hidden.size > 0 || !showStops}>
-              <Funnel className="size-5" strokeWidth={1.25} />
-            </MapButton>
-            <MapButton label="Recenter" onClick={() => setRecenter((n) => n + 1)}>
-              <Navigation className="size-5" strokeWidth={1.25} />
-            </MapButton>
-            <MapButton label="Map layers" onClick={() => setSheet("layers")}>
-              <Layers className="size-5" strokeWidth={1.25} />
-            </MapButton>
-          </div>
-
-          {pickOnMap ? (
-            <>
-              {/* Crosshair pin: its tip marks the map centre. */}
-              <MapPin aria-hidden className="pointer-events-none absolute top-1/2 left-1/2 z-10 size-9 -translate-x-1/2 -translate-y-full fill-sbb-red text-white drop-shadow-lg" strokeWidth={1.25} />
-              <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+94px)] z-10 rounded-[19px] bg-[#171717] p-3 light:bg-white shadow-xl shadow-black/60 lg:right-auto lg:left-1/2 lg:w-[420px] lg:-translate-x-1/2">
-                <p className="px-1 pb-2.5 text-[13.5px] font-light tracking-tight text-fg/85">Move the map to place the pin, then choose:</p>
-                <div className="flex gap-2">
-                  <OutlineButton
-                    onClick={() => {
-                      setFrom(pickedPoint());
-                      setPickOnMap(false);
-                      toast("Departure set to the selected location. Now choose a destination.");
-                    }}
-                  >
-                    From here
-                  </OutlineButton>
-                  <PrimaryButton
-                    disabled={busy}
-                    onClick={() => {
-                      setPickOnMap(false);
-                      search(from, pickedPoint());
-                    }}
-                  >
-                    To here
-                  </PrimaryButton>
-                </div>
-              </div>
-            </>
-          ) : (
-            <button
-              onClick={openNearestBoard}
-              className="absolute bottom-[calc(var(--home-inset)+94px)] left-1/2 z-10 flex h-[31px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-fg/50 bg-[#141414] light:bg-white px-3.5 text-[16px] font-light tracking-tight whitespace-nowrap transition-colors group-has-[.maplibregl-compact-show]:invisible hover:bg-[#2a2a2a] light:hover:bg-[#ececec] lg:group-has-[.maplibregl-compact-show]:visible"
-            >
-              <BoardIcon className="size-[22px]" /> Departure board
-            </button>
-          )}
-        </div>
+          <Home onSearchTo={(to) => search(from, to)} onSearch={search} />
+        </>
       ) : (
         <>
           <TouchTimetable onSearch={search} />
           {busy && <p className="mt-1.75 text-center text-muted">Searching…</p>}
           {error && <p className="mt-1.75 text-center text-sbb-red">{error}</p>}
-          <div className="h-[calc(109px+var(--home-inset))]" />
+          <div className="h-[calc(92px+var(--home-inset))]" />
         </>
       )}
 
@@ -189,71 +111,200 @@ export function PlanView() {
           }}
         />
       )}
-      {sheet === "filter" && (
-        <Sheet title="Filter" onClose={() => setSheet(null)}>
-          <Card className="overflow-hidden">
-            <div className="flex items-center gap-3.5 border-b border-surface-3 px-4 py-[13px]">
-              <div className="flex-1">
-                <p className="text-[16px] leading-tight font-light tracking-tight">Stops</p>
-                <p className="mt-1.5 text-[11.5px] leading-tight font-light tracking-tight text-muted">Show stops on the map</p>
-              </div>
-              <Toggle on={showStops} onChange={setShowStops} />
-            </div>
-            {showStops &&
-              STOP_MODES.map((m) => {
-                const on = !hidden.has(m.value);
-                return (
-                  <button
-                    key={m.value}
-                    role="checkbox"
-                    aria-checked={on}
-                    onClick={() =>
-                      setHidden((h) => {
-                        const n = new Set(h);
-                        if (on) n.add(m.value);
-                        else n.delete(m.value);
-                        return n;
-                      })
-                    }
-                    className="flex min-h-[46px] w-full items-center gap-[8.5px] border-b border-surface-3 px-4 text-left text-[16px] font-light tracking-tight last:border-b-0"
-                  >
-                    <Checkbox checked={on} />
-                    <ModeBadge category={MODE_CATEGORY[m.value]} className="size-6" /> {m.label}
-                  </button>
-                );
-              })}
-          </Card>
-        </Sheet>
-      )}
-      {sheet === "layers" && (
-        <Sheet title="Map layers" onClose={() => setSheet(null)}>
-          <Card className="overflow-hidden">
-            {(Object.keys(MAP_STYLES) as MapStyleId[]).map((id) => (
-              <button
-                key={id}
-                role="radio"
-                aria-checked={mapStyle === id}
-                onClick={() => setMapStyle(id)}
-                className="flex min-h-[46px] w-full items-center gap-3 border-b border-surface-3 px-4 text-left text-[16px] font-light tracking-tight last:border-b-0"
-              >
-                <Radio checked={mapStyle === id} /> {MAP_STYLES[id].label}
-              </button>
-            ))}
-          </Card>
-        </Sheet>
-      )}
       {board && <DepartureBoard stationId={board.id} stationName={board.name} onClose={() => setBoard(null)} />}
     </div>
   );
 }
 
-const MODE_CATEGORY: Record<string, string> = { train: "IR", bus: "B", tram: "T", ship: "BAT", cableway: "GB" };
+/** Everything below the search: commute, upcoming saved trips, recent purchases and destinations. */
+function Home({ onSearchTo, onSearch }: { onSearchTo: (to: Endpoint) => void; onSearch: (from: Endpoint, to: Endpoint) => void }) {
+  const { commute, trips, tickets, recentStops } = useAppState();
+  const now = useNow();
+  const [setup, setSetup] = useState(false);
 
-function MapButton({ children, label, onClick, active }: { children: React.ReactNode; label: string; onClick?: () => void; active?: boolean }) {
+  const upcoming = now === null ? [] : trips.filter((t) => new Date(t.arrival).getTime() >= now * 1000).sort((a, b) => a.departure.localeCompare(b.departure)).slice(0, 3);
+  const purchases = recentPurchases(tickets, 4);
+  const destinations = recentStops.slice(0, 6);
+
   return (
-    <button aria-label={label} onClick={onClick} className="relative flex size-[44px] items-center justify-center rounded-full border border-fg/50 bg-[#141414] light:bg-white transition-colors hover:bg-[#2a2a2a] light:hover:bg-[#ececec]">
+    <div className={cn("px-[8.5px]", DESK_COL)}>
+      <Section title="Commuting" action={commute ? { label: "Edit", onClick: () => setSetup(true) } : undefined}>
+        {commute ? <CommuteCard commute={commute} /> : <CommutePrompt onClick={() => setSetup(true)} />}
+      </Section>
+
+      {upcoming.length > 0 && (
+        <Section title="Upcoming trips" action={{ label: "All trips", href: "/trips" }}>
+          <Card className="overflow-hidden">
+            {upcoming.map((t) => (
+              <UpcomingRow key={t.id} trip={t} />
+            ))}
+          </Card>
+        </Section>
+      )}
+
+      {purchases.length > 0 && (
+        <Section title="Recently purchased" action={{ label: "Tickets", href: "/tickets" }}>
+          <Card className="overflow-hidden">
+            {purchases.map((t) => (
+              <Row key={t.id} onClick={() => onSearch({ id: t.from, name: t.from }, { id: t.to, name: t.to })}>
+                <div className="min-w-0 flex-1">
+                  <Route from={t.from} to={t.to} />
+                  <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
+                    {formatDate(new Date(t.validFrom))} · {t.product} · {formatChf(t.price)}
+                  </p>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-[13px] font-light tracking-tight text-fg/80">
+                  <RotateCcw className="size-3.5" strokeWidth={1.5} /> Again
+                </span>
+              </Row>
+            ))}
+          </Card>
+        </Section>
+      )}
+
+      {destinations.length > 0 && (
+        <Section title="Recent destinations" action={{ label: "Clear", onClick: () => actions.set({ recentStops: [] }) }}>
+          <div className="flex flex-wrap gap-2 px-0.5">
+            {destinations.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onSearchTo(s)}
+                className="flex h-[36px] max-w-full items-center gap-1.5 rounded-full border border-fg/25 bg-surface px-3.5 text-[14.5px] font-light tracking-tight transition-colors hover:bg-surface-2"
+              >
+                <StopIcon className="size-4 shrink-0" />
+                <span className="truncate">{s.name}</span>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <div className="h-[calc(92px+var(--home-inset))]" />
+      {setup && <CommuteSetup initial={commute} onClose={() => setSetup(false)} />}
+    </div>
+  );
+}
+
+type SectionAction = { label: string; href?: string; onClick?: () => void };
+
+function Section({ title, action, children }: { title: string; action?: SectionAction; children: React.ReactNode }) {
+  const actionCls = "text-[13.5px] font-light tracking-tight text-fg/70 underline-offset-2 hover:text-fg hover:underline";
+  return (
+    <section className="mt-5">
+      <div className="flex items-baseline justify-between px-[15px] pb-1.75">
+        <h2 className="text-[13.5px] font-light tracking-tight">{title}</h2>
+        {action &&
+          (action.href ? (
+            <Link href={action.href} className={actionCls}>
+              {action.label}
+            </Link>
+          ) : (
+            <button onClick={action.onClick} className={actionCls}>
+              {action.label}
+            </button>
+          ))}
+      </div>
       {children}
-      {active && <span aria-hidden className="absolute top-0 right-0 size-3 rounded-full border-2 border-[#141414] light:border-white bg-sbb-red" />}
+    </section>
+  );
+}
+
+const ROW = "flex w-full items-center gap-3 border-b border-line py-[10px] pr-3.5 pl-[15px] text-left transition-colors last:border-b-0 hover:bg-fg/5";
+
+function Row({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className={ROW}>
+      {children}
     </button>
   );
+}
+
+function Route({ from, to }: { from: string; to: string }) {
+  return (
+    <p className="text-[15.5px] leading-snug font-bold">
+      <span className="inline-block">
+        {from} <LongArrow className="mx-1.25" />
+      </span>{" "}
+      <span className="inline-block">{to}</span>
+    </p>
+  );
+}
+
+/** Commuter route with one-tap outward / return; the direction due next comes first. */
+function CommuteCard({ commute: c }: { commute: Commute }) {
+  const router = useRouter();
+  const nowTime = useNow() === null ? "00:00" : zurichDateTime().time;
+  // After the outward time has passed (and before the return time), the way home is the one you want.
+  const backFirst = nowTime > c.outTime && nowTime <= c.backTime;
+  const legs = [
+    { back: false, icon: Briefcase, label: "To work", time: c.outTime, from: c.fromName, to: c.toName },
+    { back: true, icon: House, label: "Home", time: c.backTime, from: c.toName, to: c.fromName },
+  ];
+  if (backFirst) legs.reverse();
+  return (
+    <Card className="overflow-hidden">
+      {legs.map((l, i) => (
+        <Row key={l.label} onClick={() => router.push(journeyHref("/connections", commuteQuery(c, l.back)))}>
+          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", i === 0 ? "bg-sbb-red text-white" : "border border-fg/40")}>
+            <l.icon className="size-4.5" strokeWidth={1.5} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
+              {l.label} · usually {l.time}
+            </p>
+            <Route from={l.from} to={l.to} />
+          </div>
+          <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+        </Row>
+      ))}
+    </Card>
+  );
+}
+
+function CommutePrompt({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex w-full items-center gap-3.5 rounded-[19px] bg-surface py-3.5 pr-3.5 pl-[15px] text-left transition-colors hover:bg-fg/5">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-fg/40">
+        <ArrowLeftRight className="size-4.5" strokeWidth={1.5} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[15.5px] leading-snug font-bold">Set up your commute</p>
+        <p className="mt-0.5 text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">Home and work in one tap, plus alerts about service changes.</p>
+      </div>
+      <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+    </button>
+  );
+}
+
+function UpcomingRow({ trip: t }: { trip: SavedTrip }) {
+  return (
+    <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className={ROW}>
+      <div className="w-[52px] shrink-0 text-center">
+        <p className="text-[16px] leading-tight font-bold">{formatTime(t.departure)}</p>
+        <p className="text-[11.5px] leading-tight font-light text-fg/70">{formatShortDate(new Date(t.departure))}</p>
+      </div>
+      <div className="min-w-0 flex-1">
+        <Route from={t.query.fromName} to={t.query.toName} />
+        <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
+          Arr. {formatTime(t.arrival)} · {t.summary}
+        </p>
+      </div>
+      <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+    </Link>
+  );
+}
+
+/** Newest tickets with a route, one per from→to pair. */
+function recentPurchases(tickets: Ticket[], max: number): Ticket[] {
+  const seen = new Set<string>();
+  const out: Ticket[] = [];
+  for (const t of [...tickets].sort((a, b) => b.validFrom.localeCompare(a.validFrom))) {
+    if (!t.from || !t.to) continue;
+    const k = `${t.from}→${t.to}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+    if (out.length === max) break;
+  }
+  return out;
 }
