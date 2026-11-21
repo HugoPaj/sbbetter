@@ -199,7 +199,7 @@ export function ConnectionsView() {
       {items?.length === 0 && <ErrorBox message="No connections found." />}
 
       {items && items.length > 0 && (
-        <div className="mt-px px-[8.5px] lg:px-0">
+        <div className="mt-1.25 px-[8.5px] lg:mt-px lg:px-0">
           {asked && (
             <CheaperNearby
               items={cheaper}

@@ -172,3 +172,39 @@ function compute(c: Connection, passes: Passes): Coverage {
   });
   return { pass: names.length ? joined(names) : null, several: names.length > 1, parts };
 }
+
+/**
+ * The connection cut down to the stretch between two stops (as in a `PaidPart`):
+ * what a ticket for that stretch alone is bought for. Walks between the kept rides stay.
+ */
+export function cutConnection(c: Connection, a: StopRef, b: StopRef): Connection {
+  const sections: Connection["sections"] = [];
+  let leg = -1;
+  for (const s of c.sections) {
+    if (s.journey) leg++;
+    // Walks belong between rides: keep those after the first kept ride and before the last.
+    if (!s.journey ? leg < a.leg || leg >= b.leg : leg < a.leg || leg > b.leg) continue;
+    if (!s.journey || (leg !== a.leg && leg !== b.leg)) {
+      sections.push(s);
+      continue;
+    }
+    const all = s.journey.passList.length >= 2 ? s.journey.passList : [s.departure, s.arrival];
+    const lo = leg === a.leg ? a.stop : 0;
+    const hi = leg === b.leg ? b.stop : all.length - 1;
+    const stops = all.slice(lo, hi + 1);
+    sections.push({ ...s, track: undefined, departure: stops[0], arrival: stops.at(-1)!, journey: { ...s.journey, passList: stops } });
+  }
+  const rides = sections.filter((s) => s.journey);
+  const from = rides[0]?.departure ?? c.from;
+  const to = rides.at(-1)?.arrival ?? c.to;
+  return {
+    ...c,
+    from,
+    to,
+    sections,
+    transfers: Math.max(0, rides.length - 1),
+    products: rides.map((s) => [s.journey!.category, s.journey!.number].filter(Boolean).join(" ")),
+    accessWalk: undefined,
+    fareRef: undefined,
+  };
+}

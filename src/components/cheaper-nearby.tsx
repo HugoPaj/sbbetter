@@ -136,6 +136,17 @@ export function DayPrices({
   onClose: () => void;
 }) {
   const busy = scanning || pending > 0;
+  // Already free (a travelcard covers it all): nothing can cost less, so say why instead of comparing.
+  if (askedFare?.secondClass === 0) {
+    const day = title === "Today" ? "today" : "that day";
+    return (
+      <Sheet title={`Cheapest times · ${title}`} onClose={onClose}>
+        <p className="px-1 text-[14px] leading-snug font-light text-fg/85">
+          Your {formatTime(asked.from.departure)} departure is {askedFare.pass ? `covered by your ${askedFare.pass.name}` : "free"}, so there's nothing to pay. No other time {day} can be cheaper.
+        </p>
+      </Sheet>
+    );
+  }
   return (
     <Sheet title={`Cheapest times · ${title}`} onClose={onClose}>
       <p className="px-1 text-[14px] leading-snug font-light text-fg/85">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { TriangleAlert } from "lucide-react";
+import { IdCard, TriangleAlert } from "lucide-react";
 import { forecastConnection } from "@/lib/connection-estimate";
 import { connectionKey } from "@/lib/connection-key";
 import { disruptionEnd } from "@/lib/disruption-forecast";
@@ -166,14 +166,17 @@ export function ConnectionCard({
         ) : (
           <span className="text-[16px] font-light">Walk</span>
         )}
-        {/* In the row, pulled up into the card's corner, so it and the direction share the width:
-            the tag gives way faster, cutting the pass name before the place. */}
+        {/* In the row, pulled up into the card's corner. It never shrinks: only the direction gives
+            way. A travelcard shows as a green card + amount; the connection page names the card. */}
         {price !== undefined && (
-          <span className="relative z-0 -mt-[15px] -mr-[15px] ml-auto flex h-[21px] min-w-0 shrink-[3] items-baseline gap-[3.5px] self-start pr-[12px] pl-3.5 text-[12px] leading-[21px] font-bold whitespace-nowrap before:absolute before:inset-0 before:-right-1.75 before:-z-10 before:origin-top before:skew-x-[14deg] before:rounded-bl-[7.5px] before:border-b before:border-l before:border-fg/40">
-            <span className="shrink-0">{!pass && "from "}CHF</span>
-            <span className="shrink-0 text-[15.5px]">{price.toFixed(2)}</span>
-            {/* What a travelcard leaves to pay; the connection page says for which stretch. */}
-            {pass && <span className="min-w-0 truncate font-light text-ok">{passTag(pass)}</span>}
+          <span
+            title={pass ? passTag(pass) : undefined}
+            className="relative z-0 -mt-[15px] -mr-[15px] ml-auto flex h-[21px] shrink-0 items-baseline gap-[3.5px] self-start pr-[12px] pl-3.5 text-[12px] leading-[21px] font-bold whitespace-nowrap before:absolute before:inset-0 before:-right-1.75 before:-z-10 before:origin-top before:skew-x-[14deg] before:rounded-bl-[7.5px] before:border-b before:border-l before:border-fg/40"
+          >
+            {pass && <IdCard aria-hidden className="size-[13px] self-center text-ok" strokeWidth={2} />}
+            <span>{!pass && "from "}CHF</span>
+            <span className={cn("text-[15.5px]", pass && "text-ok")}>{price.toFixed(2)}</span>
+            {pass && <span className="sr-only">{passTag(pass)}</span>}
           </span>
         )}
       </div>

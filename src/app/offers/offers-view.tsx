@@ -10,7 +10,7 @@ import { journeyFromSearchParams } from "@/lib/journey-query";
 import { openInSbb } from "@/lib/sbb-deeplink";
 import { cachedConnection, loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
 import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
-import { coverageOf } from "@/lib/passes";
+import { coverageOf, cutConnection } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
 import { fullName } from "@/lib/mock-data";
@@ -120,7 +120,9 @@ export function OffersView() {
     }
     toast(autoSave ? "Journey saved to Trips. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
     router.push("/trips");
-    openInSbb(conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
+    // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
+    const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;
+    openInSbb(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
   }
 
   return (
