@@ -20,6 +20,9 @@ import type { Connection } from "@/lib/transport";
 
 type Offer = "regular" | "supersaver" | "p2p";
 
+/** The time, read in an event handler (kept out of render, where the purity rule forbids it). */
+const clock = () => Date.now();
+
 export function OffersView() {
   const passes = usePasses();
   const router = useRouter();
@@ -110,15 +113,34 @@ export function OffersView() {
   const productName = isReturn ? "Return Ticket" : covered && ticketCount === 0 && upgradeName ? upgradeName : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
 
-  /** Tickets are bought in the real SBB app (deep link); the journey goes to Upcoming on Plan at the same time. */
+  /**
+   * Tickets are bought in the real SBB app (deep link). The app keeps a demo copy of the ticket,
+   * linked to this journey, so it shows in Plan's Upcoming (opening the trip) and on Tickets.
+   */
   function purchase() {
     if (!conn) return;
     const reroute = rerouteFromSearchParams(new URLSearchParams(raw));
     const tripId = key && key + (reroute ? `~${reroute.key}` : "");
-    if (autoSave && tripId && !trips.some((t) => t.id === tripId)) {
-      actions.toggleTrip({ id: tripId, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined });
-    }
-    toast(autoSave ? "Journey saved to Upcoming. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
+    const trip = tripId ? { id: tripId, query: query!, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined } : undefined;
+    if (autoSave && trip && !trips.some((t) => t.id === trip.id)) actions.toggleTrip({ ...trip, index: 0 });
+    // A point-to-point ticket is valid on its day of travel; it shows from now on.
+    const now = clock();
+    const start = new Date((conn.from.departureTimestamp ?? now / 1000) * 1000);
+    const end = new Date(start);
+    end.setHours(23, 59, 59);
+    actions.addTicket({
+      id: `t-${now}`,
+      product: productName,
+      from: stretch?.from ?? fromName ?? "",
+      to: stretch?.to ?? toName ?? "",
+      via: via || "direct",
+      validFrom: new Date(Math.min(now, start.getTime())).toISOString(),
+      validTo: end.toISOString(),
+      price: total,
+      travelClass: effectiveClass as 1 | 2,
+      trip,
+    });
+    toast("Ticket added to Upcoming. Finish buying it in the SBB app.");
     router.push("/plan");
     // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
     const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;

@@ -20,7 +20,12 @@ export type Ticket = {
   validTo: string; // ISO
   price: number;
   travelClass: 1 | 2;
+  /** The journey it was bought for (tickets from Offers): Plan's Upcoming opens it. */
+  trip?: TicketTrip;
 };
+
+/** A ticket's journey: enough to reopen its trip overview. */
+export type TicketTrip = Omit<SavedTrip, "index">;
 
 export type SavedTrip = {
   id: string;

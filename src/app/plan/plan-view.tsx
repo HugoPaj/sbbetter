@@ -16,7 +16,7 @@ import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint, type Positi
 import { commuteQuery, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { getConnections, nearbyStations, searchLocations, type Connection } from "@/lib/transport";
 import { DelayLabel, delayNote } from "@/components/journey";
-import { actions, useAppState, useStoreReady, type Commute, type SavedTrip, type Ticket } from "@/lib/store";
+import { actions, useAppState, useStoreReady, type Commute, type SavedTrip, type Ticket, type TicketTrip } from "@/lib/store";
 import { haversine, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 
@@ -123,7 +123,7 @@ export function PlanView() {
   );
 }
 
-/** Everything below the search: commute, upcoming trips and valid tickets, recent destinations. */
+/** Everything below the search: commute, upcoming tickets and saved trips (each opening its trip), recent destinations. */
 function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) => void }) {
   const { commute, trips, tickets, recentStops, settings } = useAppState();
   const ready = useStoreReady();
@@ -152,7 +152,7 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
         {!ready || (commute && at === undefined) ? <CommuteSkeleton /> : commute ? <CommuteCard commute={commute} at={at ?? null} /> : <CommutePrompt onClick={() => setSetup(true)} />}
       </Section>
 
-      {/* Saved trips and tickets aren't known before hydration (nor is the time): placeholders until they are. */}
+      {/* Tickets aren't known before hydration (nor is the time): placeholders until they are. */}
       {(!ready || now === null) && (
         <Section title="Upcoming">
           <UpcomingSkeleton />
@@ -162,13 +162,9 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
       {upcoming.length > 0 && (
         <Section title="Upcoming" action={{ label: "Tickets", href: "/tickets" }}>
           <Card className="overflow-hidden">
-            {upcoming.map((u) =>
-              u.trip ? (
-                <UpcomingRow key={u.trip.id} trip={u.trip} status={TRIP_STATUS[String(settings[`sim:${u.trip.id}`])]} />
-              ) : (
-                u.ticket && <TicketRow key={u.ticket.id} ticket={u.ticket} nowMs={now! * 1000} />
-              ),
-            )}
+            {upcoming.map((u) => (
+              <UpcomingRow key={u.ticket?.id ?? u.trip!.id} item={u} status={u.trip ? TRIP_STATUS[String(settings[`sim:${u.trip.id}`])] : undefined} />
+            ))}
             {upcomingAll.length > UPCOMING_MAX && (
               <button onClick={() => setAll((a) => !a)} className="w-full py-2.5 text-center text-[13.5px] font-light tracking-tight text-fg/70 transition-colors hover:bg-fg/5 hover:text-fg">
                 {all ? "Show fewer" : `Show all ${upcomingAll.length}`}
@@ -500,65 +496,74 @@ const TRIP_STATUS: Record<string, string> = {
   cancelled: "Your train is cancelled. Tap to see what to do.",
 };
 
-/** A saved trip: tap for its journey. Its ticket (if any) lives on the Tickets page. */
-function UpcomingRow({ trip: t, status }: { trip: SavedTrip; status?: string }) {
-  return (
-    <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className={ROW}>
-        <div className="w-[52px] shrink-0 text-center">
-          <p className="text-[16px] leading-tight font-bold">{formatTime(t.departure)}</p>
-          <p className="text-[11.5px] leading-tight font-light text-fg/70">{formatShortDate(new Date(t.departure))}</p>
-        </div>
-        <div className="min-w-0 flex-1">
-          <Route from={t.query.fromName} to={t.query.toName} />
+/**
+ * An upcoming ticket or saved trip. With a journey it reads like the trip (departure, arrival,
+ * trains) and opens the trip overview; a ticket without one shows when it can be used and opens the
+ * overview of the next connection on its route. (The ticket itself, with its code, is on the Tickets page.)
+ */
+function UpcomingRow({ item: { ticket: k, trip: t, at }, status }: { item: Upcoming; status?: string }) {
+  const start = new Date(at);
+  // Every item has a ticket, a trip, or both.
+  const from = t?.query.fromName ?? k!.from;
+  const to = t?.query.toName ?? k!.to;
+  const body = (
+    <>
+      <div className="w-[52px] shrink-0 text-center">
+        <p className="text-[16px] leading-tight font-bold">{formatTime(at)}</p>
+        <p className="text-[11.5px] leading-tight font-light text-fg/70">{formatShortDate(start)}</p>
+      </div>
+      <div className="min-w-0 flex-1">
+        {to ? <Route from={from} to={to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{from || k!.product}</p>}
+        {t && (
           <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
             Arr. {formatTime(t.arrival)} · {t.summary}
           </p>
-          {status && (
-            <p className="mt-1 flex items-center gap-1.5 text-[12.5px] leading-tight text-sbb-red">
-              <TriangleAlert className="size-3.5 shrink-0" strokeWidth={2} />
-              {status}
-            </p>
-          )}
-        </div>
-        <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
-    </Link>
+        )}
+        {status && (
+          <p className="mt-1 flex items-center gap-1.5 text-[12.5px] leading-tight text-sbb-red">
+            <TriangleAlert className="size-3.5 shrink-0" strokeWidth={2} />
+            {status}
+          </p>
+        )}
+      </div>
+    </>
   );
-}
-
-/** A valid ticket with no saved trip: tap for connections on its route (from now, or from when it becomes valid). The ticket itself is on the Tickets page. */
-function TicketRow({ ticket: t, nowMs }: { ticket: Ticket; nowMs: number }) {
-  const label = t.to ? <Route from={t.from} to={t.to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{t.from || t.product}</p>;
-  // A zone or area ticket has no destination to route to.
-  if (!t.to) return <div className={ROW}><div className="min-w-0 flex-1">{label}</div></div>;
-  const at = zurichDateTime(new Date(Math.max(nowMs, Date.parse(t.validFrom))));
-  const href = journeyHref("/connections", { from: t.from, fromName: t.from, to: t.to, toName: t.to, ...at, isArrivalTime: false, transportations: [], ...(t.via ? { via: t.via, viaName: t.via } : {}) });
+  const href = t
+    ? journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })
+    : k?.to
+      ? // No journey stored (older tickets): the trip overview of the next connection on its route (the detail page takes the first one without a key).
+        journeyHref("/connections/detail", { from: k.from, fromName: k.from, to: k.to, toName: k.to, ...zurichDateTime(start), isArrivalTime: false, transportations: [], ...(k.via && k.via !== "direct" ? { via: k.via, viaName: k.via } : {}) })
+      : null;
+  // A zone or area ticket has no journey to open.
+  if (!href) return <div className={ROW}>{body}</div>;
   return (
     <Link href={href} className={ROW}>
-      <div className="min-w-0 flex-1">{label}</div>
+      {body}
       <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
     </Link>
   );
 }
 
-type Upcoming = { at: string; trip?: SavedTrip; ticket?: Ticket };
+type Upcoming = { ticket?: Ticket; trip?: TicketTrip; at: string };
 
 /**
- * Saved trips not yet over and tickets still valid, soonest first. A ticket for the same route
- * that is valid when a trip leaves goes with that trip rather than on a row of its own.
+ * Valid tickets whose journey isn't over, then saved trips no ticket goes with (say a travelcard
+ * covers them), soonest first. A ticket's journey is the one it was
+ * bought for; older tickets without one take a saved trip on the same route that leaves while
+ * they are valid. `at` is the departure, or (no journey) when the ticket can be used from.
  */
 function upcomingItems(trips: SavedTrip[], tickets: Ticket[], nowMs: number): Upcoming[] {
-  const valid = tickets.filter((t) => Date.parse(t.validTo) >= nowMs);
-  const used = new Set<string>();
-  const items: Upcoming[] = trips
-    .filter((t) => Date.parse(t.arrival) >= nowMs)
-    .map((trip) => {
-      const dep = Date.parse(trip.departure);
-      const ticket = valid.find(
-        (k) => !used.has(k.id) && k.from === trip.query.fromName && k.to === trip.query.toName && Date.parse(k.validFrom) <= dep && dep <= Date.parse(k.validTo),
-      );
-      if (ticket) used.add(ticket.id);
-      return { at: trip.departure, trip, ticket };
-    });
-  for (const k of valid) if (!used.has(k.id)) items.push({ at: k.validFrom, ticket: k });
+  const items: Upcoming[] = [];
+  const ticketed = new Set<string>();
+  for (const k of tickets) {
+    if (Date.parse(k.validTo) < nowMs) continue;
+    const trip =
+      k.trip ??
+      trips.find((t) => k.from === t.query.fromName && k.to === t.query.toName && Date.parse(k.validFrom) <= Date.parse(t.departure) && Date.parse(t.departure) <= Date.parse(k.validTo));
+    if (trip) ticketed.add(trip.id);
+    if (trip && Date.parse(trip.arrival) < nowMs) continue;
+    items.push({ ticket: k, trip, at: trip?.departure || new Date(Math.max(nowMs, Date.parse(k.validFrom))).toISOString() });
+  }
+  for (const t of trips) if (!ticketed.has(t.id) && Date.parse(t.arrival) >= nowMs) items.push({ trip: t, at: t.departure });
   return items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }
