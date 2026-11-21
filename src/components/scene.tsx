@@ -3,11 +3,13 @@ import { cn } from "./ui";
 
 type Variant = "lake" | "station" | "commute";
 
-const SKY: Record<Variant, [string, string]> = {
-  lake: ["#222c44", "#55617f"],
-  station: ["#1a2233", "#4a5674"],
-  commute: ["#0c111c", "#262d45"],
-};
+/**
+ * Everything that changes between night and day is a `--sc-*` variable (see
+ * `.scene` in globals.css): the dark theme shows the scene at night, the light
+ * theme by day. People, the train's red stripe and the signs keep their colours.
+ */
+const fill = (name: string) => ({ fill: `var(--sc-${name})` });
+const stop = (name: string) => ({ stopColor: `var(--sc-${name})` });
 
 /** Deterministic star field. */
 const STARS = Array.from({ length: 22 }, (_, i) => ({
@@ -21,10 +23,10 @@ function Train({ x, y, cars, length = 96 }: { x: number; y: number; cars: number
     <g transform={`translate(${x} ${y})`}>
       {Array.from({ length: cars }, (_, c) => (
         <g key={c} transform={`translate(${c * (length + 3)} 0)`}>
-          <rect width={length} height="13" rx="3" fill="#d9dce3" />
+          <rect width={length} height="13" rx="3" style={fill("train")} />
           <rect y="9.5" width={length} height="2.5" fill="#d32f2f" />
           {Array.from({ length: Math.floor((length - 10) / 11) }, (_, i) => (
-            <rect key={i} x={6 + i * 11} y="3" width="7" height="4.5" rx="0.5" fill="#f5d98a" opacity={i % 4 === 2 ? 0.35 : 0.9} />
+            <rect key={i} x={6 + i * 11} y="3" width="7" height="4.5" rx="0.5" style={fill("train-window")} opacity={i % 4 === 2 ? 0.35 : 0.9} />
           ))}
         </g>
       ))}
@@ -33,29 +35,29 @@ function Train({ x, y, cars, length = 96 }: { x: number; y: number; cars: number
 }
 
 /**
- * Original placeholder illustrations (night sky, mountains, train) used for
- * empty states. Swap for real artwork if you have it.
+ * Original placeholder illustrations (sky, mountains, train) used for empty
+ * states: at night in the dark theme, by day in the light one. Swap for real
+ * artwork if you have it.
  */
 export function Scene({ variant = "lake" }: { variant?: Variant }) {
-  const [top, bottom] = SKY[variant];
   return (
-    <svg viewBox="0 0 400 880" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 size-full" aria-hidden>
+    <svg viewBox="0 0 400 880" preserveAspectRatio="xMidYMax slice" className={`scene scene-${variant} absolute inset-0 size-full`} aria-hidden>
       <defs>
         <linearGradient id={`sky-${variant}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={top} />
-          <stop offset="0.7" stopColor={bottom} />
+          <stop offset="0" style={stop("sky-top")} />
+          <stop offset="0.7" style={stop("sky-bottom")} />
         </linearGradient>
         <linearGradient id={`rock-${variant}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#8b93a8" />
-          <stop offset="1" stopColor="#4b5368" />
+          <stop offset="0" style={stop("rock-lit")} />
+          <stop offset="1" style={stop("rock-shade")} />
         </linearGradient>
         <linearGradient id={`grass-${variant}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#35502f" />
-          <stop offset="1" stopColor="#111f14" />
+          <stop offset="0" style={stop("grass-top")} />
+          <stop offset="1" style={stop("grass-bottom")} />
         </linearGradient>
         <linearGradient id={`water-${variant}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#4c6a80" />
-          <stop offset="1" stopColor="#2b4257" />
+          <stop offset="0" style={stop("water-top")} />
+          <stop offset="1" style={stop("water-bottom")} />
         </linearGradient>
       </defs>
       <rect width="400" height="880" fill={`url(#sky-${variant})`} />
@@ -63,25 +65,25 @@ export function Scene({ variant = "lake" }: { variant?: Variant }) {
       {variant !== "commute" && (
         <>
           {STARS.map((s, i) => (
-            <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#fff" opacity={0.8} />
+            <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#fff" style={{ opacity: "var(--sc-stars)" }} />
           ))}
           {/* far and near ranges */}
           <path d="M0 470l42-52 30 26 58-82 44 60 34-34 46 58 52-74 46 62 48-40v116H0z" fill={`url(#rock-${variant})`} />
-          <path d="M130 362l16 22-10 6-14 18-6-24zM306 364l12 20-8 4-10 16-6-22z" fill="#e6eaf2" opacity="0.75" />
-          <path d="M0 500l70-44 62 30 76-42 84 48 108-40v88H0z" fill="#3d465c" />
+          <path d="M130 362l16 22-10 6-14 18-6-24zM306 364l12 20-8 4-10 16-6-22z" style={fill("snow")} opacity="0.75" />
+          <path d="M0 500l70-44 62 30 76-42 84 48 108-40v88H0z" style={fill("hills")} />
         </>
       )}
 
       {variant === "lake" && (
         <>
-          <path d="M0 512q200-26 400 0v30H0z" fill="#2b4329" />
+          <path d="M0 512q200-26 400 0v30H0z" style={fill("shore")} />
           <Train x={-30} y={505} cars={5} />
           <rect y="524" width="400" height="80" fill={`url(#water-${variant})`} />
-          <path d="M40 548h60M210 560h80M120 574h50M300 584h60" stroke="#86a3b5" strokeWidth="1" opacity="0.45" />
+          <path d="M40 548h60M210 560h80M120 574h50M300 584h60" style={{ stroke: "var(--sc-ripple)" }} strokeWidth="1" opacity="0.45" />
           <path d="M0 610q110-30 220-12t180-6v168H0z" fill={`url(#grass-${variant})`} />
-          <rect y="759" width="400" height="121" fill="#111f14" />
+          <rect y="759" width="400" height="121" style={fill("grass-bottom")} />
           {/* pines */}
-          <g fill="#16291b">
+          <g style={fill("pine")}>
             <path d="M38 628l16-46 16 46zM42 604l12-36 12 36zM52 628h4v14h-4z" />
             <path d="M342 622l13-38 13 38zM345 602l10-30 10 30zM353 622h4v12h-4z" />
           </g>
@@ -100,19 +102,19 @@ export function Scene({ variant = "lake" }: { variant?: Variant }) {
 
       {variant === "station" && (
         <>
-          <rect y="528" width="400" height="232" fill="#232a3a" />
+          <rect y="528" width="400" height="232" style={fill("wall")} />
           {/* canopy */}
-          <path d="M-10 500h300l24 10H-10z" fill="#39425a" />
-          <rect x="150" y="510" width="6" height="110" fill="#2b3348" />
+          <path d="M-10 500h300l24 10H-10z" style={fill("canopy")} />
+          <rect x="150" y="510" width="6" height="110" style={fill("post")} />
           <rect x="178" y="520" width="58" height="16" rx="2" fill="#1f3a8a" />
           <path d="M184 526h30M184 531h20" stroke="#fff" strokeWidth="2" />
           <g transform="translate(0 20)">
             <Train x={-110} y={540} cars={2} length={230} />
           </g>
-          <path d="M350 548q22 0 34 26h-34z" fill="#d9dce3" />
-          <rect y="592" width="400" height="6" fill="#4a5674" />
-          <rect y="598" width="400" height="282" fill="#2c3448" />
-          <path d="M0 606h400" stroke="#e9ecf3" strokeWidth="3" strokeDasharray="18 10" opacity="0.6" />
+          <path d="M350 548q22 0 34 26h-34z" style={fill("train")} />
+          <rect y="592" width="400" height="6" style={fill("edge")} />
+          <rect y="598" width="400" height="282" style={fill("platform")} />
+          <path d="M0 606h400" style={{ stroke: "var(--sc-marking)" }} strokeWidth="3" strokeDasharray="18 10" opacity="0.6" />
           {/* two travellers holding phones */}
           <g transform="translate(0 6)">
             <circle cx="92" cy="640" r="22" fill="#c98a5e" />
@@ -134,20 +136,20 @@ export function Scene({ variant = "lake" }: { variant?: Variant }) {
       {variant === "commute" && (
         <>
           {/* carriage interior: ceiling, windows, seats */}
-          <path d="M0 250L400 330v70H0z" fill="#1b2133" />
-          <path d="M0 330h400v180H0z" fill="#2a3149" />
+          <path d="M0 250L400 330v70H0z" style={fill("ceiling")} />
+          <path d="M0 330h400v180H0z" style={fill("wall")} />
           {[20, 150, 280].map((x) => (
             <g key={x}>
-              <rect x={x} y="356" width="104" height="120" rx="12" fill="#3b4666" />
-              <path d={`M${x} 440l34-22 30 14 40-26v58a12 12 0 0 1-12 12H${x + 12}a12 12 0 0 1-12-12z`} fill="#2f3a57" />
-              <circle cx={x + 78} cy="382" r="6" fill="#dfe5f2" opacity="0.7" />
+              <rect x={x} y="356" width="104" height="120" rx="12" style={fill("window")} />
+              <path d={`M${x} 440l34-22 30 14 40-26v58a12 12 0 0 1-12 12H${x + 12}a12 12 0 0 1-12-12z`} style={fill("view")} />
+              <circle cx={x + 78} cy="382" r="6" style={fill("orb")} opacity="0.7" />
             </g>
           ))}
-          <rect y="500" width="400" height="380" fill="#141a2a" />
+          <rect y="500" width="400" height="380" style={fill("floor")} />
           {[-20, 120, 260].map((x, i) => (
             <g key={x}>
-              <rect x={x} y={520 + (i % 2) * 14} width="124" height="380" rx="22" fill="#1d2f5c" />
-              <rect x={x + 22} y={506 + (i % 2) * 14} width="80" height="26" rx="10" fill="#24386b" />
+              <rect x={x} y={520 + (i % 2) * 14} width="124" height="380" rx="22" style={fill("seat")} />
+              <rect x={x + 22} y={506 + (i % 2) * 14} width="80" height="26" rx="10" style={fill("headrest")} />
             </g>
           ))}
           {/* commuter with a laptop */}
@@ -180,7 +182,7 @@ export function EmptyState({
   return (
     <div className="relative flex-1 overflow-hidden lg:mx-auto lg:my-8 lg:h-[min(760px,calc(100dvh-128px))] lg:w-full lg:max-w-[460px] lg:flex-none lg:rounded-[28px]">
       <Scene variant={variant} />
-      <div className="relative mx-[8.5px] rounded-[19px] bg-[#10141d]/55 px-2 text-white pt-[12.5px] pb-4 text-center backdrop-blur-[2px]" style={{ marginTop: top }}>
+      <div className="relative mx-[8.5px] rounded-[19px] bg-[#10141d]/55 px-2 pt-[12.5px] text-white light:bg-white/80 light:text-fg pb-4 text-center backdrop-blur-[2px]" style={{ marginTop: top }}>
         <h2 className="text-[16px] font-bold">{title}</h2>
         <p className={cn("mt-[11.5px] leading-[20px] font-light tracking-tight hyphens-auto", compact ? "text-[13.5px]" : "text-[15.5px]")}>{text}</p>
       </div>

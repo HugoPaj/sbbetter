@@ -33,7 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {/* Phone-width column; from `lg` up it is the full-width area next to the side navigation. */}
-        <div className="relative mx-auto min-h-dvh w-full max-w-[430px] bg-page shadow-2xl shadow-black lg:mx-0 lg:max-w-none lg:pl-[248px] lg:shadow-none">
+        <div className="relative mx-auto min-h-dvh w-full max-w-[430px] bg-page shadow-2xl shadow-black light:shadow-black/25 lg:mx-0 lg:max-w-none lg:pl-[248px] lg:shadow-none">
           <SideNav />
           {children}
           <BottomNav />
