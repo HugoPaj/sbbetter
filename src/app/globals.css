@@ -119,3 +119,35 @@ body {
   bottom: calc(var(--map-bottom, 0px) + 8px);
   right: 8px;
 }
+
+/* Re-routing a trip (detail view): rows that exist in both plans glide to their new place,
+   dropped rows fade out, new rows fade in once the old ones are gone. */
+::view-transition-group(*) {
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(*):only-child {
+  animation: vt-out 180ms ease-in both;
+}
+::view-transition-new(*):only-child {
+  animation: vt-in 320ms 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
