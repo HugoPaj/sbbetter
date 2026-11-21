@@ -7,7 +7,7 @@ import { Card, Checkbox, DESK_COL, ErrorBox, Header, Overlap, PillToggle, Primar
 import { OffersSkeleton } from "@/components/skeletons";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
-import { sbbDeepLink } from "@/lib/sbb-deeplink";
+import { openInSbb } from "@/lib/sbb-deeplink";
 import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
 import { cityOf, passSummary } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
@@ -102,9 +102,9 @@ export function OffersView() {
     if (autoSave && tripId && !trips.some((t) => t.id === tripId)) {
       actions.toggleTrip({ id: tripId, query: query!, index: 0, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined });
     }
-    window.open(sbbDeepLink(conn), "_blank", "noopener");
     toast(autoSave ? "Journey saved to Trips. Finish buying your ticket in the SBB app." : "Finish buying your ticket in the SBB app.");
     router.push("/trips");
+    openInSbb(conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
   }
 
   return (
