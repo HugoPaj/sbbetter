@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { ChevronRight, Layers, Navigation } from "lucide-react";
-import { Card, Radio, Sheet, cn } from "@/components/ui";
+import { Card, Radio, Sheet, cn, useIsDesktop } from "@/components/ui";
 import { ConnectionMap, type LonLat, type MapPart } from "@/components/plan/connection-map";
 import { MAP_STYLES, type MapStyleId } from "@/components/plan/journey-map";
 import { LineLabel, ModeBadge, modeOf } from "@/components/journey";
 import { WalkIcon } from "@/components/icons";
 import { formatTime } from "@/lib/format";
 import { usePosition } from "@/lib/use-position";
+import { useTheme } from "@/lib/theme";
 import type { Checkpoint, Connection, Section } from "@/lib/transport";
 
 export type { LonLat };
@@ -85,23 +86,28 @@ function currentPart(parts: Part[], now: number) {
   return i < 0 ? 0 : i;
 }
 
-/** Height of an element, kept up to date. */
+/** Height of an element and width of the box it is positioned in, kept up to date. */
 function useHeight() {
-  const [height, setHeight] = useState(0);
+  const [size, setSize] = useState({ height: 0, around: 0 });
   const ref = useCallback((el: HTMLElement | null) => {
     if (!el) return;
-    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    const box = el.offsetParent;
+    const ro = new ResizeObserver(() => setSize({ height: el.offsetHeight, around: box?.clientWidth ?? 0 }));
     ro.observe(el);
+    if (box) ro.observe(box);
     return () => ro.disconnect();
   }, []);
-  return [ref, height] as const;
+  return [ref, size.height, size.around] as const;
 }
 
 const nowSec = () => Date.now() / 1000;
+/** Width of the floating trip panel on desktop (px); matches `lg:w-[400px]` on the panel. */
+const PANEL = 400;
 
 /**
  * Map view of a connection: full-bleed map, locate/layers buttons, and a
- * bottom sheet with one chip and one swipeable card per trip step.
+ * bottom sheet with one chip and one swipeable card per trip step (on desktop
+ * the sheet is a floating panel in the map's bottom-left corner).
  * Rendered inside a `relative` container that fills the space under the header.
  */
 export function TripMap({
@@ -128,9 +134,21 @@ export function TripMap({
   const [now, setNow] = useState(nowSec);
   const [collapsed, setCollapsed] = useState(false);
   const [recenter, setRecenter] = useState(0);
-  const [styleId, setStyleId] = useState<MapStyleId>("dark");
+  // The base map follows the theme until one is picked under "Map layers".
+  const theme = useTheme();
+  const [pickedStyle, setStyleId] = useState<MapStyleId | null>(null);
+  const styleId = pickedStyle ?? theme;
   const [layers, setLayers] = useState(false);
-  const [sheetRef, sheetHeight] = useHeight();
+  const [sheetRef, sheetHeight, paneWidth] = useHeight();
+  const desktop = useIsDesktop();
+  /**
+   * What the floating UI covers: the card and sheet on phones. On desktop the panel sits in the
+   * bottom-left corner: the route is fitted beside it when the map is wide enough, above it otherwise.
+   */
+  const padding = useMemo(() => {
+    if (!desktop) return { top: topInset, bottom: sheetHeight };
+    return paneWidth - PANEL >= 600 ? { top: 0, bottom: 0, left: PANEL + 20, right: 44 } : { top: 0, bottom: sheetHeight + 20, right: 44 };
+  }, [desktop, topInset, sheetHeight, paneWidth]);
   const scroller = useRef<HTMLDivElement>(null);
   const chips = useRef<(HTMLButtonElement | null)[]>([]);
   /** Card index a programmatic scroll is heading to (ignore the scroll events on the way). */
@@ -191,9 +209,9 @@ export function TripMap({
 
   return (
     <>
-      <ConnectionMap parts={mapParts} active={active} self={self} recenterKey={recenter} styleId={styleId} padding={{ top: topInset, bottom: sheetHeight }} />
+      <ConnectionMap parts={mapParts} active={active} self={self} recenterKey={recenter} styleId={styleId} padding={padding} />
 
-      <div className="absolute right-[8.5px] z-10 flex flex-col gap-[8.5px]" style={{ top: topInset + 12 }}>
+      <div className="absolute right-[8.5px] z-10 flex flex-col gap-[8.5px] lg:right-5" style={{ top: topInset + 12 }}>
         <MapButton label="Show my location" onClick={() => setRecenter((n) => n + 1)}>
           <Navigation className="size-5" strokeWidth={1.25} />
         </MapButton>
@@ -205,7 +223,7 @@ export function TripMap({
       <section
         ref={sheetRef}
         aria-label="Trip sections"
-        className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[22px] bg-[#1c1c1c] pb-[calc(77px+var(--home-inset)+36px)] shadow-[0_-6px_24px_rgba(0,0,0,0.5)]"
+        className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[22px] bg-[#1c1c1c] light:bg-white pb-[calc(77px+var(--home-inset)+36px)] shadow-[0_-6px_24px_rgba(0,0,0,0.5)] lg:absolute lg:bottom-5 lg:left-5 lg:w-[400px] lg:translate-x-0 lg:rounded-[22px] lg:border lg:border-fg/10 lg:pb-4"
       >
         <button
           aria-label={collapsed ? "Expand" : "Collapse"}
@@ -215,7 +233,7 @@ export function TripMap({
           onPointerCancel={() => (drag.current = null)}
           className="flex w-full touch-none justify-center pt-[11px] pb-[11px]"
         >
-          <span className="h-[3.5px] w-8 rounded-full bg-white/40" />
+          <span className="h-[3.5px] w-8 rounded-full bg-fg/40" />
         </button>
 
         <div role="tablist" className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-[17px]">
@@ -230,7 +248,7 @@ export function TripMap({
               onClick={() => select(i)}
               className={cn(
                 "relative flex h-[32px] shrink-0 items-center gap-2 rounded-l-[6px] rounded-r-full pr-4 pl-3",
-                p.kind === "ride" ? "bg-sbb-blue" : "bg-surface-3",
+                p.kind === "ride" ? "bg-sbb-blue text-white" : "bg-surface-3",
               )}
             >
               {p.kind === "ride" ? (
@@ -244,7 +262,7 @@ export function TripMap({
                   <span className="text-[16px] font-bold">{p.walk.minutes}&apos;</span>
                 </>
               )}
-              {i === active && <span aria-hidden className="absolute -bottom-[11px] left-1/2 h-[3px] w-3 -translate-x-1/2 rounded-full bg-white" />}
+              {i === active && <span aria-hidden className="absolute -bottom-[11px] left-1/2 h-[3px] w-3 -translate-x-1/2 rounded-full bg-fg" />}
             </button>
           ))}
         </div>
@@ -283,20 +301,20 @@ export function TripMap({
 
 function MapButton({ children, label, onClick }: { children: ReactNode; label: string; onClick: () => void }) {
   return (
-    <button aria-label={label} onClick={onClick} className="flex size-[44px] items-center justify-center rounded-full border border-white/50 bg-[#141414]">
+    <button aria-label={label} onClick={onClick} className="flex size-[44px] items-center justify-center rounded-full border border-fg/50 bg-[#141414] light:bg-white transition-colors hover:bg-[#2a2a2a] light:hover:bg-[#ececec]">
       {children}
     </button>
   );
 }
 
-const CARD = "overflow-hidden rounded-[17px] border border-white/35";
-const TOP = "bg-[#1c1c1c] px-4 pt-[13px] pb-[11px] text-[16.5px] leading-[28px] font-light tracking-tight";
-const BOTTOM = "flex items-end justify-between gap-4 border-t border-white/35 bg-black px-4 pt-[13px] pb-[13px]";
+const CARD = "overflow-hidden rounded-[17px] border border-fg/35";
+const TOP = "bg-[#1c1c1c] light:bg-white px-4 pt-[13px] pb-[11px] text-[16.5px] leading-[28px] font-light tracking-tight";
+const BOTTOM = "flex items-end justify-between gap-4 border-t border-fg/35 bg-page px-4 pt-[13px] pb-[13px]";
 
 function Figure({ label, value, extra, right }: { label: string; value: string; extra?: ReactNode; right?: boolean }) {
   return (
     <div className={cn("min-w-0", right && "text-right")}>
-      <p className="text-[14.5px] leading-5 font-light tracking-tight text-white/85">{label}</p>
+      <p className="text-[14.5px] leading-5 font-light tracking-tight text-fg/85">{label}</p>
       <p className="mt-0.5 text-[26px] leading-8 font-bold tracking-[-0.03em] tabular-nums">
         {value}
         {extra}

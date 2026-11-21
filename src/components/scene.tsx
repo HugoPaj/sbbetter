@@ -178,9 +178,9 @@ export function EmptyState({
   compact?: boolean;
 }) {
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative flex-1 overflow-hidden lg:mx-auto lg:my-8 lg:h-[min(760px,calc(100dvh-128px))] lg:w-full lg:max-w-[460px] lg:flex-none lg:rounded-[28px]">
       <Scene variant={variant} />
-      <div className="relative mx-[8.5px] rounded-[19px] bg-[#10141d]/55 px-2 pt-[12.5px] pb-4 text-center backdrop-blur-[2px]" style={{ marginTop: top }}>
+      <div className="relative mx-[8.5px] rounded-[19px] bg-[#10141d]/55 px-2 text-white pt-[12.5px] pb-4 text-center backdrop-blur-[2px]" style={{ marginTop: top }}>
         <h2 className="text-[16px] font-bold">{title}</h2>
         <p className={cn("mt-[11.5px] leading-[20px] font-light tracking-tight hyphens-auto", compact ? "text-[13.5px]" : "text-[15.5px]")}>{text}</p>
       </div>

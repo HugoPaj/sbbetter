@@ -5,11 +5,13 @@ import { ArrowUpDown, Check, History } from "lucide-react";
 import type { JourneyQuery } from "@/lib/journey-query";
 import { TRANSPORT_FILTERS, type TransportFilter } from "@/lib/transport";
 import { formatShortDate, zurichDateTime } from "@/lib/format";
-import { Card, Checkbox, PillToggle, PrimaryButton, Sheet, Toggle, cn } from "./ui";
+import { Card, Checkbox, PillToggle, PrimaryButton, Radio, Sheet, Toggle, cn } from "./ui";
 import { SlidersIcon, StopIcon, TargetIcon } from "./icons";
 import { ModeBadge } from "./journey";
 import { LocationPicker } from "./plan/location-picker";
 import { CURRENT_LOCATION } from "@/lib/use-position";
+import { CHEAPER_PRIORITIES, CHEAPER_SETTING, type CheaperPriority } from "@/lib/cheaper";
+import { useSetting } from "@/lib/store";
 
 /** From/To + date/time + filters card at the top of the Connections screen. */
 export function JourneySearchCard({
@@ -41,20 +43,20 @@ export function JourneySearchCard({
     <>
       <Card className="overflow-hidden shadow-lg shadow-black/40">
         <div className="relative">
-          <span aria-hidden className="absolute top-[31.5px] bottom-[31.5px] left-[21.5px] w-px bg-white" />
-          <button onClick={() => setSheet("from")} className="flex h-[47.5px] w-full items-center gap-3 pr-[71px] pl-3 text-left">
+          <span aria-hidden className="absolute top-[31.5px] bottom-[31.5px] left-[21.5px] w-px bg-fg" />
+          <button onClick={() => setSheet("from")} className="flex h-[47.5px] w-full items-center gap-3 pr-[71px] pl-3 text-left transition-colors hover:bg-fg/5">
             {isCurrent ? <TargetIcon className="size-5 shrink-0 text-[#2f8cff]" /> : <StopIcon className="size-5 shrink-0" />}
             <span className="truncate text-[16px] font-light tracking-tight">{query.fromName}</span>
           </button>
           <div className="ml-11 h-px bg-surface-3" />
-          <button onClick={() => setSheet("to")} className="flex h-[47.5px] w-full items-center gap-3 pr-[71px] pl-3 text-left">
+          <button onClick={() => setSheet("to")} className="flex h-[47.5px] w-full items-center gap-3 pr-[71px] pl-3 text-left transition-colors hover:bg-fg/5">
             <StopIcon className="size-5 shrink-0" />
             <span className="truncate text-[16px] font-light tracking-tight">{query.toName}</span>
           </button>
           <button
             aria-label="Swap"
             onClick={swap}
-            className="absolute top-1/2 right-3 flex size-[44px] -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-surface"
+            className="absolute top-1/2 right-3 flex size-[44px] -translate-y-1/2 items-center justify-center rounded-full border border-fg/50 bg-surface"
           >
             <ArrowUpDown className="size-6" strokeWidth={1.1} />
           </button>
@@ -87,7 +89,7 @@ export function JourneySearchCard({
           >
             <SlidersIcon className="size-6" strokeWidth={1.1} />
             {(query.transportations.length > 0 || query.via) && (
-              <span className="absolute top-1.25 right-1.25 flex size-4.25 items-center justify-center rounded-full bg-sbb-red">
+              <span className="absolute top-1.25 right-1.25 flex size-4.25 items-center justify-center rounded-full bg-sbb-red text-white">
                 <Check className="size-3" strokeWidth={3} />
               </span>
             )}
@@ -182,6 +184,7 @@ function AdvancedSearch({
   const [via, setVia] = useState(initialVia !== null);
   const [viaStop, setViaStop] = useState(initialVia);
   const [pickVia, setPickVia] = useState(false);
+  const [prefer, setPrefer] = useSetting<CheaperPriority>(CHEAPER_SETTING, "price");
 
   const toggle = (vals: TransportFilter[], on: boolean) =>
     setSel((s) => {
@@ -227,6 +230,23 @@ function AdvancedSearch({
           </div>
           <Toggle on={showPrices} onChange={onShowPricesChange} />
         </div>
+        {showPrices && (
+          <div className="border-b border-surface-3 px-4 pt-[15px] pb-1.5">
+            <p className="text-[16px] leading-tight font-light tracking-tight">Cheaper departures</p>
+            <p className="mt-[8.5px] text-[11.5px] leading-tight font-light tracking-tight text-muted">When leaving a little earlier or later costs less, suggest</p>
+            <div role="radiogroup" aria-label="Cheaper departures" className="mt-1.5">
+              {CHEAPER_PRIORITIES.map((p) => (
+                <button key={p.value} role="radio" aria-checked={p.value === prefer} onClick={() => setPrefer(p.value)} className="flex min-h-[46px] w-full items-center gap-3 py-1.75 text-left">
+                  <Radio checked={p.value === prefer} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[16px] leading-tight font-light tracking-tight">{p.label}</span>
+                    <span className="mt-1 block text-[11.5px] leading-tight font-light text-muted">{p.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-3.5 px-4 py-[15px]">
           <div className="flex-1">
             <p className="text-[16px] leading-tight font-light tracking-tight">Means of transport</p>
@@ -296,8 +316,8 @@ function DateTimeSheet({
         />
       </div>
       <Card className="mt-3.5 space-y-2.5 p-3.5">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl bg-surface-2 px-3.5 py-2.5 text-[16px] [color-scheme:dark]" />
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-full rounded-xl bg-surface-2 px-3.5 py-2.5 text-[16px] [color-scheme:dark]" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl bg-surface-2 px-3.5 py-2.5 text-[16px]" />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-full rounded-xl bg-surface-2 px-3.5 py-2.5 text-[16px]" />
       </Card>
       <div className="mt-4.25 flex gap-2.5">
         <button
@@ -306,7 +326,7 @@ function DateTimeSheet({
             setDate(n.date);
             setTime(n.time);
           }}
-          className="rounded-full border border-white/40 px-5 text-[15.5px] font-light"
+          className="rounded-full border border-fg/40 px-5 text-[15.5px] font-light"
         >
           Now
         </button>

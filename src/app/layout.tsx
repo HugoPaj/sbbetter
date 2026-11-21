@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { BottomNav } from "@/components/bottom-nav";
+import { BottomNav, SideNav } from "@/components/bottom-nav";
 import { Toaster } from "@/components/ui";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SBB Mobile (prototype)",
+  title: "SBBetter (prototype)",
   description: "Hackathon prototype of the SBB Mobile app",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "SBB" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "SBBetter" },
 };
 
 export const viewport: Viewport = {
@@ -21,12 +21,20 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/**
+ * Runs while the HTML is parsed, so the right theme is there for the first paint:
+ * the stored choice ("sbb-theme", see lib/theme.ts), else the device setting.
+ */
+const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} antialiased`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} antialiased`}>
       <body>
-        {/* Phone-width column; on desktop it's centred like a device. */}
-        <div className="relative mx-auto min-h-dvh w-full max-w-[430px] bg-black shadow-2xl shadow-black">
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Phone-width column; from `lg` up it is the full-width area next to the side navigation. */}
+        <div className="relative mx-auto min-h-dvh w-full max-w-[430px] bg-page shadow-2xl shadow-black lg:mx-0 lg:max-w-none lg:pl-[248px] lg:shadow-none">
+          <SideNav />
           {children}
           <BottomNav />
           <Toaster />

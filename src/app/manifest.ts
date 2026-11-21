@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SBB Mobile (prototype)",
-    short_name: "SBB",
+    name: "SBBetter (prototype)",
+    short_name: "SBBetter",
     start_url: "/plan",
     display: "standalone",
     background_color: "#000000",

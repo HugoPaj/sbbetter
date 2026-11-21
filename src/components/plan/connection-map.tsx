@@ -14,7 +14,7 @@ export type MapPart = {
   stops: { at: LonLat; name: string; end?: boolean }[];
 };
 
-export type MapPadding = { top: number; bottom: number };
+export type MapPadding = { top: number; bottom: number; /** Desktop: the floating panel on the left and the map buttons on the right. */ left?: number; right?: number };
 
 const LINE = "#2d327d";
 const BOLD = ["Montserrat SemiBold", "Open Sans Bold", "Noto Sans Regular", "Noto Sans CJK JP Regular"];
@@ -93,17 +93,17 @@ export function ConnectionMap({
   }, [parts, active, self]);
 
   // Follow the active section (and re-fit when the sheet changes height).
-  const { top, bottom } = padding;
+  const { top, bottom, left, right } = padding;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     (async () => {
       const ml = await import("maplibre-gl");
       const bounds = boundsOf(ml, latest.current.parts, active);
-      if (bounds) map.fitBounds(bounds, { padding: pad({ top, bottom }), maxZoom: 16, duration: 600 });
+      if (bounds) map.fitBounds(bounds, { padding: pad({ top, bottom, left, right }), maxZoom: 16, duration: 600 });
     })();
     // `parts` is only read through `latest` so a re-render doesn't move the camera.
-  }, [active, top, bottom]);
+  }, [active, top, bottom, left, right]);
 
   // "Locate me".
   useEffect(() => {
@@ -129,7 +129,7 @@ export function ConnectionMap({
   );
 }
 
-const pad = (p: MapPadding) => ({ top: p.top + 24, bottom: p.bottom + 44, left: 48, right: 48 });
+const pad = (p: MapPadding) => ({ top: p.top + 24, bottom: p.bottom + 44, left: (p.left ?? 0) + 48, right: (p.right ?? 0) + 48 });
 
 function boundsOf(ml: typeof import("maplibre-gl"), parts: MapPart[], active: number) {
   const coords = parts[active]?.coords.length ? parts[active].coords : parts.flatMap((p) => p.coords);

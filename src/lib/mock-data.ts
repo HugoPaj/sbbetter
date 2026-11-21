@@ -1,3 +1,5 @@
+import { passesFromTravelcards } from "./passes";
+
 /**
  * Mock account data for the prototype. Replace with your own demo persona.
  * (Kept generic on purpose: don't commit real personal data.)
@@ -9,8 +11,11 @@ export const USER = {
   birthDate: "01.01.2000",
   gender: "M",
   halfFare: true,
-  travelcards: ["Half Fare Travelcard", "Night GA Travelcard"],
+  travelcards: ["Half Fare Travelcard", "Night GA Travelcard", "Mobilis Travelcard, zones 11 + 12"],
 };
+
+/** What the demo traveller's travelcards entitle them to (see src/lib/passes.ts). */
+export const USER_PASSES = passesFromTravelcards(USER.travelcards);
 
 export const fullName = `${USER.firstName} ${USER.lastName}`;
 

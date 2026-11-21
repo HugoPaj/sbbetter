@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Accessibility, Baby, BadgeSwissFranc, Bike, CircleUserRound, FileText, Gift, Luggage, Pencil, Tickets, Users, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { Card, Header, InfoLine, ListRow, OutlineButton, Overlap, PillLink, PillToggle, PrimaryButton, Radio, Segmented, Sheet, toast } from "@/components/ui";
+import { Card, DESK_COL, Header, InfoLine, ListRow, OutlineButton, Overlap, PillLink, PillToggle, PrimaryButton, Radio, Segmented, Sheet, cn, toast } from "@/components/ui";
 import { LocationPicker } from "@/components/plan/location-picker";
 import { CURRENT_LOCATION } from "@/lib/use-position";
 import { actions, useAppState, useSetting, type Ticket } from "@/lib/store";
 import { formatDate, formatTime } from "@/lib/format";
 import { DogIcon, TicketIcon } from "@/components/icons";
-import { fullName } from "@/lib/mock-data";
+import { USER_PASSES, fullName } from "@/lib/mock-data";
+import { passCovering, passCoveringRestOfDay } from "@/lib/passes";
+import { usePosition } from "@/lib/use-position";
 
 /** MOCK catalogue: prices and texts are illustrative, not official fares. */
 type Product = {
@@ -24,12 +26,14 @@ type Product = {
   area: string;
   text: string;
   kind?: "parking";
+  /** A ticket for the buyer's own travel, pointless while one of their travelcards covers it: in the zones around them ("local") or anywhere. */
+  travel?: "local" | "national";
 };
 
 const DAY_PASSES: Product[] = [
   { label: "Friends Day Pass for Youth", icon: <Users strokeWidth={1.1} />, price: 80, area: "GA area of validity", text: "One day of unlimited travel for up to four people under 25 travelling together, in 2nd class." },
-  { label: "Saver Day Pass", icon: <TicketIcon glyph="percent" />, price: 29, first: 52, area: "GA area of validity", text: "Unlimited travel for one day. The earlier you buy, the cheaper it is; limited availability. Price shown with a Half Fare Travelcard." },
-  { label: "Day Pass for the Half Fare Travelcard", icon: <TicketIcon glyph="day" />, price: 75, first: 127, area: "GA area of validity", text: "Unlimited travel for one day throughout the GA area of validity. Only valid with a Half Fare Travelcard." },
+  { label: "Saver Day Pass", icon: <TicketIcon glyph="percent" />, price: 29, first: 52, travel: "national", area: "GA area of validity", text: "Unlimited travel for one day. The earlier you buy, the cheaper it is; limited availability. Price shown with a Half Fare Travelcard." },
+  { label: "Day Pass for the Half Fare Travelcard", icon: <TicketIcon glyph="day" />, price: 75, first: 127, travel: "national", area: "GA area of validity", text: "Unlimited travel for one day throughout the GA area of validity. Only valid with a Half Fare Travelcard." },
   { label: "Day Class Upgrade", icon: <Tickets strokeWidth={1.1} />, price: 52, area: "GA area of validity", text: "Travel in 1st class for a whole day with your 2nd-class ticket or travelcard." },
   { label: "Day Pass Children", icon: <Baby strokeWidth={1.1} />, price: 19, first: 33, area: "GA area of validity", text: "Unlimited travel for one day for children aged 6 to 16 accompanied by an adult." },
   { label: "Tandem Day Pass for GA Travelcard Youth", icon: <UsersRound strokeWidth={1.1} />, price: 25, area: "GA area of validity", text: "Take a companion along for a day: valid together with a GA Travelcard Youth." },
@@ -38,8 +42,8 @@ const DAY_PASSES: Product[] = [
 ];
 
 const LOCAL: Product[] = [
-  { label: "Short-distance and single ticket", icon: <TicketIcon glyph="route" />, price: 2.3, first: 3.9, minutes: 30, area: "Local zone", text: "Short-distance ticket for the fare network around your departure stop. Price shown with a Half Fare Travelcard." },
-  { label: "Regional Day Pass", icon: <TicketIcon glyph="day" />, price: 6.9, first: 11.7, area: "Local zones", text: "Unlimited travel for one day in the zones around your departure stop. Price shown with a Half Fare Travelcard." },
+  { label: "Short-distance and single ticket", icon: <TicketIcon glyph="route" />, price: 2.3, first: 3.9, minutes: 30, travel: "local", area: "Local zone", text: "Short-distance ticket for the fare network around your departure stop. Price shown with a Half Fare Travelcard." },
+  { label: "Regional Day Pass", icon: <TicketIcon glyph="day" />, price: 6.9, first: 11.7, travel: "local", area: "Local zones", text: "Unlimited travel for one day in the zones around your departure stop. Price shown with a Half Fare Travelcard." },
 ];
 
 const PARKING: Product[] = [
@@ -93,7 +97,7 @@ export default function ShopPage() {
           ]}
         />
       </Header>
-      <Overlap className="space-y-4.25">
+      <Overlap className={cn("space-y-4.25", DESK_COL)}>
         <Card className="flex h-[52px] items-center gap-1.5 px-[15px]">
           <CircleUserRound className="-ml-0.5 size-[35px] shrink-0" strokeWidth={0.9} />
           <span className="truncate text-[16px] font-bold">{fullName}</span>
@@ -177,6 +181,16 @@ function ProductSheet({ product, place, onClose }: { product: Product; place: st
   const [plate, setPlate] = useState(plates[0] ?? "");
   const price = klass === "1" && product.first ? product.first : product.price;
   const parking = product.kind === "parking";
+  // Bought now, it is valid from now and (local tickets) around here: if a travelcard already covers that in 2nd class, don't sell it.
+  const [openedAt] = useState(() => Date.now());
+  const here = usePosition();
+  const local = product.travel === "local" ? here : null;
+  const coveredBy =
+    product.travel && klass === "2"
+      ? product.minutes
+        ? passCovering(USER_PASSES, openedAt, openedAt + product.minutes * 60_000, local)
+        : passCoveringRestOfDay(USER_PASSES, openedAt, local)
+      : null;
 
   function buy() {
     if (parking && !plate.trim()) return toast("Please enter your licence plate.");
@@ -202,7 +216,7 @@ function ProductSheet({ product, place, onClose }: { product: Product; place: st
 
   return (
     <Sheet title={product.label} onClose={onClose}>
-      <p className="px-1 text-[14.5px] leading-snug font-light text-white/85">{product.text}</p>
+      <p className="px-1 text-[14.5px] leading-snug font-light text-fg/85">{product.text}</p>
       {product.first && (
         <div className="mt-4 flex">
           <PillToggle
@@ -229,11 +243,18 @@ function ProductSheet({ product, place, onClose }: { product: Product; place: st
         <InfoLine label={parking ? "Car park" : "Valid for"} value={place === "Switzerland" ? product.area : place} />
         <InfoLine label="Validity" value={product.minutes ? (product.minutes >= 1440 ? "24 hours from purchase" : `${product.minutes} minutes from purchase`) : "Today until end of service"} />
         <div className="border-t border-line pt-2">
-          <InfoLine label={<b className="font-bold text-white">Total</b>} value={<b className="font-bold">CHF {price.toFixed(2)}</b>} />
+          <InfoLine label={<b className="font-bold text-fg">Total</b>} value={<b className="font-bold">CHF {price.toFixed(2)}</b>} />
         </div>
       </Card>
       <p className="my-3 px-1 text-[11px] text-muted">Prototype only — no payment is made. Prices are illustrative.</p>
-      <PrimaryButton onClick={buy}>Buy for CHF {price.toFixed(2)}</PrimaryButton>
+      {coveredBy ? (
+        <>
+          <p className="mb-3 px-1 text-[13px] leading-snug font-light text-ok">Your {coveredBy} already covers this in 2nd class, where and for as long as the ticket would be valid.</p>
+          <PrimaryButton disabled>No ticket needed</PrimaryButton>
+        </>
+      ) : (
+        <PrimaryButton onClick={buy}>Buy for CHF {price.toFixed(2)}</PrimaryButton>
+      )}
     </Sheet>
   );
 }
@@ -273,7 +294,7 @@ function ServiceSheet({ service, onClose }: { service: string; onClose: () => vo
     const list = refunds ? tickets.filter((t) => new Date(t.validTo).getTime() > now) : tickets;
     return (
       <Sheet title={service} onClose={onClose} full>
-        <p className="px-1 pb-3 text-[14.5px] leading-snug font-light text-white/85">
+        <p className="px-1 pb-3 text-[14.5px] leading-snug font-light text-fg/85">
           {refunds
             ? "Unused tickets can be refunded before the end of their validity. A deductible may apply to real refunds."
             : "Download a receipt for any ticket purchased in the app."}
@@ -284,7 +305,7 @@ function ServiceSheet({ service, onClose }: { service: string; onClose: () => vo
             <Card key={t.id} className="flex items-center gap-3 py-3 pr-3 pl-4">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-bold">{[t.from, t.to].filter(Boolean).join(" → ")}</p>
-                <p className="truncate text-[12.5px] font-light text-white/70">
+                <p className="truncate text-[12.5px] font-light text-fg/70">
                   {t.product} · {formatDate(new Date(t.validFrom))} · CHF {t.price.toFixed(2)}
                 </p>
               </div>
@@ -298,7 +319,7 @@ function ServiceSheet({ service, onClose }: { service: string; onClose: () => vo
                     toast("Receipt downloaded.");
                   }
                 }}
-                className="flex h-8 shrink-0 items-center rounded-full border border-white/50 px-3.5 text-[13.5px] font-light"
+                className="flex h-8 shrink-0 items-center rounded-full border border-fg/50 px-3.5 text-[13.5px] font-light"
               >
                 {refunds ? "Refund" : "Receipt"}
               </button>
@@ -311,7 +332,7 @@ function ServiceSheet({ service, onClose }: { service: string; onClose: () => vo
 
   return (
     <Sheet title={service} onClose={onClose}>
-      <p className="px-1 text-[14.5px] leading-snug font-light text-white/85">{info.text}</p>
+      <p className="px-1 text-[14.5px] leading-snug font-light text-fg/85">{info.text}</p>
       {service === "Gift cards" && (
         <input
           aria-label="Gift card code"
@@ -350,7 +371,7 @@ function Group({ label, value, children, onEdit }: { label: string; value: strin
         <p className="min-w-0 flex-1 truncate text-[16px] font-light tracking-tight">
           {label} <b className="font-bold tracking-normal">{value}</b>
         </p>
-        <button aria-label={`Edit ${label.replace(":", "")}`} onClick={onEdit} className="mr-1.5 flex size-[32px] shrink-0 items-center justify-center rounded-full border border-white/50">
+        <button aria-label={`Edit ${label.replace(":", "")}`} onClick={onEdit} className="mr-1.5 flex size-[32px] shrink-0 items-center justify-center rounded-full border border-fg/50">
           <Pencil className="size-4.25" strokeWidth={1.25} />
         </button>
       </div>

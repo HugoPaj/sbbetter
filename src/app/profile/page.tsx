@@ -1,8 +1,8 @@
 "use client";
 
-import { Bell, Car, CircleHelp, CircleUserRound, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
+import { Bell, Car, SunMoon, CircleHelp, CircleUserRound, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
 import { useState } from "react";
-import { Card, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
+import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useSetting } from "@/lib/store";
 import { ProfileSheets, type ProfileSheet } from "./sheets";
@@ -13,7 +13,7 @@ export default function ProfilePage() {
   return (
     <div>
       <Header title="Profile" extend />
-      <Overlap>
+      <Overlap className={DESK_COL}>
         <Card className="flex h-[72px] items-center gap-[8.5px] px-[15px]">
           <CircleUserRound className="-ml-0.5 size-[35px] shrink-0" strokeWidth={0.9} />
           <div className="min-w-0">
@@ -35,6 +35,7 @@ export default function ProfilePage() {
           <ListRow icon={Bell} label="Notifications" onClick={() => setSheet("notifications")} />
           <ListRow icon={Newspaper} label="Offers & Advertising" onClick={() => setSheet("ads")} />
           <ListRow icon={Tickets} label="Settings for ticket purchase" onClick={() => setSheet("purchase")} />
+          <ListRow icon={SunMoon} label="Appearance" onClick={() => setSheet("appearance")} />
         </Card>
 
         <SectionTitle>Help</SectionTitle>
@@ -50,7 +51,7 @@ export default function ProfilePage() {
               setLoggedOut(false);
               toast("Demo: logged in again as the demo traveller (no real SwissPass login).");
             }}
-            className="flex h-[32px] items-center rounded-full border border-white/50 bg-surface px-[15px] text-[16px] font-light tracking-tight"
+            className="flex h-[32px] items-center rounded-full border border-fg/50 bg-surface px-[15px] text-[16px] font-light tracking-tight"
           >
             {loggedOut ? "Log in" : "Log out"}
           </button>

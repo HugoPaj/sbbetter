@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { CURRENT_LOCATION, type Endpoint } from "@/lib/use-position";
 import { actions, useAppState } from "@/lib/store";
 import { FromIcon, TargetIcon, ToIcon } from "../icons";
-import { Overlap, cn, toast } from "../ui";
+import { DESK_COL, Overlap, cn, toast } from "../ui";
 import { LocationPicker } from "./location-picker";
 
 function seededRandom(seed: number) {
@@ -50,9 +50,9 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
   };
 
   return (
-    <Overlap>
+    <Overlap className={DESK_COL}>
       <div className="overflow-hidden rounded-[19px]">
-        <div className="grid grid-cols-2 gap-[3px]">
+        <div className="grid grid-cols-2 gap-[3px] lg:grid-cols-4">
           {favourites.map((f, i) => (
             <button
               key={f.id}
@@ -62,7 +62,7 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
                 actions.set({ favourites: favourites.filter((x) => x.id !== f.id) });
               }}
               className={cn(
-                "relative h-[84px] overflow-hidden bg-gradient-to-br from-[#3a4466] via-[#2a3250] to-[#1d2440] px-3 pb-2.5 text-left",
+                "relative h-[84px] overflow-hidden bg-gradient-to-br from-[#3a4466] via-[#2a3250] to-[#1d2440] px-3 pb-2.5 text-left text-white",
                 from.id === f.id && "ring-2 ring-sbb-red ring-inset",
               )}
             >
@@ -72,7 +72,7 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
                 <span className="text-[16px] leading-[1.15] font-bold hyphens-auto">{f.line2}</span>
               </span>
               {editing && (
-                <span aria-hidden className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-sbb-red">
+                <span aria-hidden className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-sbb-red text-white">
                   <X className="size-4" strokeWidth={2} />
                 </span>
               )}
@@ -121,7 +121,7 @@ export function TouchTimetable({ onSearch }: { onSearch: (from: Endpoint, to: En
         <button
           onClick={() => setEditing((e) => !e)}
           aria-pressed={editing}
-          className={cn("flex h-[31px] shrink-0 items-center rounded-full border border-white/50 bg-surface px-5 text-[14.5px] font-light", editing && "bg-white text-black")}
+          className={cn("flex h-[31px] shrink-0 items-center rounded-full border border-fg/50 bg-surface px-5 text-[14.5px] font-light", editing && "bg-fg text-page")}
         >
           {editing ? "done" : "edit"}
         </button>

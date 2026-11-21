@@ -5,10 +5,11 @@ import { ChevronRight, Trash2 } from "lucide-react";
 import { Card, InfoLine, OutlineButton, PrimaryButton, Radio, Sheet, Toggle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
+import { THEME_OPTIONS, setTheme, useThemeChoice } from "@/lib/theme";
 
-export type ProfileSheet = "personal" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "help" | "legal" | "logout";
+export type ProfileSheet = "personal" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "appearance" | "help" | "legal" | "logout";
 
-const INPUT = "h-[44px] w-full rounded-[15px] bg-surface-2 px-3.5 text-[16px] font-light tracking-tight outline-none placeholder:text-muted [color-scheme:dark]";
+const INPUT = "h-[44px] w-full rounded-[15px] bg-surface-2 px-3.5 text-[16px] font-light tracking-tight outline-none placeholder:text-muted";
 
 function Note({ children }: { children: ReactNode }) {
   return <p className="mt-3 px-1 text-[12px] leading-snug font-light text-muted">{children}</p>;
@@ -101,7 +102,7 @@ function CoPassengers() {
             <button
               aria-label={`Remove ${p.name}`}
               onClick={() => actions.set({ coPassengers: coPassengers.filter((c) => c.id !== p.id) })}
-              className="flex size-9 items-center justify-center text-white/70"
+              className="flex size-9 items-center justify-center text-fg/70"
             >
               <Trash2 className="size-4.25" strokeWidth={1.25} />
             </button>
@@ -143,7 +144,7 @@ function Plates() {
           {plates.map((p) => (
             <div key={p} className="flex items-center border-b border-surface-3 py-1.5 pr-2 pl-4 last:border-b-0">
               <span className="flex-1 text-[16px] font-light tracking-wide">{p}</span>
-              <button aria-label={`Remove ${p}`} onClick={() => actions.set({ plates: plates.filter((x) => x !== p) })} className="flex size-9 items-center justify-center text-white/70">
+              <button aria-label={`Remove ${p}`} onClick={() => actions.set({ plates: plates.filter((x) => x !== p) })} className="flex size-9 items-center justify-center text-fg/70">
                 <Trash2 className="size-4.25" strokeWidth={1.25} />
               </button>
             </div>
@@ -241,7 +242,7 @@ function LinkRow({ label, hint, href, onClick }: { label: string; hint?: string;
         <span className="block text-[16px] leading-tight font-light tracking-tight">{label}</span>
         {hint && <span className="mt-1 block text-[11.5px] leading-tight font-light text-muted">{hint}</span>}
       </span>
-      <ChevronRight className="size-4.25 shrink-0 text-white/70" strokeWidth={1.5} />
+      <ChevronRight className="size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
     </>
   );
   return href ? (
@@ -305,9 +306,9 @@ function Legal() {
           <div key={title} className="border-b border-surface-3 last:border-b-0">
             <button onClick={() => setOpen(open === title ? null : title)} aria-expanded={open === title} className="flex w-full items-center px-4 py-[12px] text-left">
               <span className="flex-1 text-[16px] font-light tracking-tight">{title}</span>
-              <ChevronRight className={`size-4.25 text-white/70 transition-transform ${open === title ? "rotate-90" : ""}`} strokeWidth={1.5} />
+              <ChevronRight className={`size-4.25 text-fg/70 transition-transform ${open === title ? "rotate-90" : ""}`} strokeWidth={1.5} />
             </button>
-            {open === title && <p className="px-4 pb-3.5 text-[13.5px] leading-snug font-light text-white/80">{text}</p>}
+            {open === title && <p className="px-4 pb-3.5 text-[13.5px] leading-snug font-light text-fg/80">{text}</p>}
           </div>
         ))}
       </Card>
@@ -319,7 +320,7 @@ function Legal() {
 function Logout({ onClose }: { onClose: () => void }) {
   return (
     <>
-      <p className="px-1 text-[15px] leading-snug font-light text-white/85">
+      <p className="px-1 text-[15px] leading-snug font-light text-fg/85">
         Do you really want to log out? Your tickets remain stored in your SwissPass account and will be available again after you log in.
       </p>
       <div className="mt-5 space-y-2.5">
@@ -338,7 +339,25 @@ function Logout({ onClose }: { onClose: () => void }) {
   );
 }
 
+function Appearance() {
+  const choice = useThemeChoice();
+  return (
+    <Card className="overflow-hidden">
+      {THEME_OPTIONS.map((o) => (
+        <button key={o.value} role="radio" aria-checked={o.value === choice} onClick={() => setTheme(o.value)} className="flex w-full items-center gap-3 border-b border-surface-3 px-4 py-[12px] text-left last:border-b-0">
+          <Radio checked={o.value === choice} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[16px] leading-tight font-light tracking-tight">{o.label}</span>
+            <span className="mt-1 block text-[11.5px] leading-tight font-light text-muted">{o.hint}</span>
+          </span>
+        </button>
+      ))}
+    </Card>
+  );
+}
+
 const TITLES: Record<ProfileSheet, string> = {
+  appearance: "Appearance",
   personal: "Personal details",
   copassenger: "Co-passenger",
   plates: "Licence plates",
@@ -353,7 +372,7 @@ const TITLES: Record<ProfileSheet, string> = {
 
 export function ProfileSheets({ sheet, onClose }: { sheet: ProfileSheet; onClose: () => void }) {
   return (
-    <Sheet title={TITLES[sheet]} onClose={onClose} full={sheet !== "logout"}>
+    <Sheet title={TITLES[sheet]} onClose={onClose} full={sheet !== "logout" && sheet !== "appearance"}>
       {sheet === "personal" && <PersonalDetails />}
       {sheet === "copassenger" && <CoPassengers />}
       {sheet === "plates" && <Plates />}
@@ -361,6 +380,7 @@ export function ProfileSheets({ sheet, onClose }: { sheet: ProfileSheet; onClose
       {sheet === "notifications" && <Notifications />}
       {sheet === "ads" && <Ads />}
       {sheet === "purchase" && <Purchase />}
+      {sheet === "appearance" && <Appearance />}
       {sheet === "help" && <Help />}
       {sheet === "legal" && <Legal />}
       {sheet === "logout" && <Logout onClose={onClose} />}

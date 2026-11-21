@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Trash2, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Card, Header, OutlineButton, PrimaryButton, Segmented, Sheet, toast } from "@/components/ui";
+import { Card, DESK_COL, Header, OutlineButton, PrimaryButton, Segmented, Sheet, cn, toast } from "@/components/ui";
 import { LocationPicker } from "@/components/plan/location-picker";
 import { EmptyState } from "@/components/scene";
 import { LongArrow } from "@/components/icons";
@@ -61,9 +61,9 @@ export default function TripsPage() {
             action={<PrimaryButton href="/plan">Plan a journey</PrimaryButton>}
           />
         ) : (
-          <div className="space-y-[8.5px] px-[8.5px] pt-4.25">
+          <div className={cn("space-y-[8.5px] px-[8.5px] pt-4.25 lg:pt-6", DESK_COL)}>
             {trips.map((t) => (
-              <Card key={t.id} className="flex items-center gap-1.75 py-3 pr-1.75 pl-[15px]">
+              <Card key={t.id} className="flex items-center gap-1.75 py-3 pr-1.75 pl-[15px] transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
                 <Link href={journeyHref("/connections/detail", t.query, { key: t.id, ...t.params })} className="min-w-0 flex-1">
                   <p className="text-[16px] leading-snug font-bold">
                     <span className="inline-block">
@@ -71,7 +71,7 @@ export default function TripsPage() {
                     </span>{" "}
                     <span className="inline-block">{t.query.toName}</span>
                   </p>
-                  <p className="mt-[1.5px] text-[13px] leading-[1.4] font-light text-white/70">
+                  <p className="mt-[1.5px] text-[13px] leading-[1.4] font-light text-fg/70">
                     {formatDate(new Date(t.departure))}, {formatTime(t.departure)} – {formatTime(t.arrival)}
                     <br />
                     {t.summary}
@@ -83,7 +83,7 @@ export default function TripsPage() {
                   onClick={() => {
                     actions.removeTrip(t.id);
                     toast("Journey removed from your trips.");
-                  }} className="flex size-9.25 shrink-0 items-center justify-center text-white/70">
+                  }} className="flex size-9.25 shrink-0 items-center justify-center text-fg/70">
                   <Trash2 className="size-4.25" strokeWidth={1.25} />
                 </button>
               </Card>
@@ -94,7 +94,7 @@ export default function TripsPage() {
 
       {tab === "commuting" &&
         (commute ? (
-          <div className="space-y-[8.5px] px-[8.5px] pt-4.25">
+          <div className={cn("space-y-[8.5px] px-[8.5px] pt-4.25 lg:pt-6", DESK_COL)}>
             <Card className="px-[15px] pt-3 pb-4">
               <div className="flex items-start gap-2">
                 <p className="min-w-0 flex-1 text-[16px] leading-snug font-bold">
@@ -109,12 +109,12 @@ export default function TripsPage() {
                     actions.set({ commute: null });
                     toast("Commuter route deleted.");
                   }}
-                  className="-mt-1 -mr-2 flex size-9.25 shrink-0 items-center justify-center text-white/70"
+                  className="-mt-1 -mr-2 flex size-9.25 shrink-0 items-center justify-center text-fg/70"
                 >
                   <Trash2 className="size-4.25" strokeWidth={1.25} />
                 </button>
               </div>
-              <p className="mt-[1.5px] text-[13px] leading-[1.4] font-light text-white/70">
+              <p className="mt-[1.5px] text-[13px] leading-[1.4] font-light text-fg/70">
                 Outward {commute.outTime} · Return {commute.backTime} · Mon–Fri
                 <br />
                 We’ll inform you about service changes on this route.
@@ -161,7 +161,7 @@ function TripStatus({ scenario }: { scenario: unknown }) {
 function CommuteSetup({ initial, onClose }: { initial: Commute | null; onClose: () => void }) {
   const [c, setC] = useState<Commute>(initial ?? { from: "", fromName: "", to: "", toName: "", outTime: "07:30", backTime: "17:30" });
   const [picking, setPicking] = useState<"from" | "to" | null>(null);
-  const field = "flex h-[44px] w-full items-center rounded-[15px] bg-surface-2 px-3.5 text-left text-[16px] font-light tracking-tight [color-scheme:dark]";
+  const field = "flex h-[44px] w-full items-center rounded-[15px] bg-surface-2 px-3.5 text-left text-[16px] font-light tracking-tight";
   return (
     <>
       <Sheet title="Commuter route" onClose={onClose}>

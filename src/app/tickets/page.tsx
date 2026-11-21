@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Card, Header, InfoLine, OutlineButton, Overlap, PrimaryButton, Segmented, Sheet, cn, toast } from "@/components/ui";
+import { Card, DESK_COL, Header, InfoLine, OutlineButton, Overlap, PrimaryButton, Segmented, Sheet, cn, toast } from "@/components/ui";
 import { LongArrow, PhoneTicketIcon, QrOffIcon } from "@/components/icons";
 import { USER } from "@/lib/mock-data";
 import { actions, useAppState, type Ticket } from "@/lib/store";
@@ -14,6 +14,7 @@ import { journeyHref } from "@/lib/journey-query";
 const TRAVELCARDS: Record<string, { validity: string; text: string }> = {
   "Half Fare Travelcard": { validity: "01.01.2026 – 31.12.2026", text: "Travel at half price on trains, buses, boats and most mountain railways throughout Switzerland. Renews automatically." },
   "Night GA Travelcard": { validity: "01.01.2026 – 31.12.2026", text: "Unlimited travel in 2nd class from 7 pm until the end of service (5 am, or 7 am on Saturdays and Sundays). For young people under 25." },
+  "Mobilis Travelcard, zones 11 + 12": { validity: "01.01.2026 – 31.12.2026", text: "Unlimited travel in 2nd class on trains, metros and buses within Mobilis zones 11 and 12 (Grand Lausanne: Lausanne, Renens, Ecublens, Prilly, Pully, Epalinges, Lutry and neighbouring municipalities)." },
 };
 
 /** Deterministic QR-looking pattern (NOT a real, scannable code). */
@@ -84,10 +85,10 @@ export default function TicketsPage() {
       </Header>
 
       {tab === "valid" ? (
-        <Overlap>
-          {/* SwissPass card */}
-          <Card className="overflow-hidden">
-            <div className="relative flex justify-between overflow-hidden bg-[#b8242a] px-[15.5px] pt-2 pb-[6.5px]">
+        <Overlap className="lg:mx-auto lg:grid lg:max-w-[1040px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
+          {/* SwissPass card (desktop: stays in view on the left, tickets on the right) */}
+          <Card className="overflow-hidden lg:sticky lg:top-[88px]">
+            <div className="relative flex justify-between overflow-hidden bg-[#b8242a] px-[15.5px] text-white pt-2 pb-[6.5px]">
               <DotField className="absolute top-[9px] right-[10px] h-[64px] w-[118px] text-white/80" />
               <div className="relative">
                 <p className="text-[16px] leading-[22px] font-bold">
@@ -103,7 +104,7 @@ export default function TicketsPage() {
                 Swiss<b className="font-bold">Pass</b>
               </p>
             </div>
-            <div className="bg-[#2a2a2a] px-[15.5px] pt-[16.5px] pb-[9px]">
+            <div className="bg-[#2a2a2a] light:bg-white px-[15.5px] pt-[16.5px] pb-[9px]">
               {page === 0 ? (
                 <div className="flex items-stretch justify-between">
                   <button aria-label="Enlarge SwissPass code" onClick={() => setZoom(true)} className="w-[48.2%]">
@@ -128,18 +129,19 @@ export default function TicketsPage() {
               <div className="mt-[9.5px] flex justify-center" role="tablist" aria-label="SwissPass pages">
                 {[0, 1].map((i) => (
                   <button key={i} role="tab" aria-selected={page === i} aria-label={i === 0 ? "Code" : "Card details"} onClick={() => setPage(i)} className="-my-2 px-[5px] py-2">
-                    <span className={cn("block size-1.75 rounded-full", page === i ? "bg-white" : "bg-white/40")} />
+                    <span className={cn("block size-1.75 rounded-full", page === i ? "bg-fg" : "bg-fg/40")} />
                   </button>
                 ))}
               </div>
             </div>
           </Card>
 
-          <div className="mt-[38.5px] space-y-[8.5px]">
+          <div className="lg:min-w-0">
+          <div className="mt-[38.5px] space-y-[8.5px] lg:mt-0">
             {valid.length === 0 ? (
-              <div className="rounded-[19px] border border-white/35 bg-gradient-to-b from-[#1a1a1a] to-[#0c0c0c] px-5 pt-4.25 pb-3 text-center">
+              <div className="rounded-[19px] border border-fg/35 bg-gradient-to-b from-[#1a1a1a] to-[#0c0c0c] light:from-white light:to-[#f6f6f6] px-5 pt-4.25 pb-3 text-center">
                 <PhoneTicketIcon className="mx-auto h-[78px] w-[62px]" />
-                <p className="mt-1.5 text-[14px] font-light tracking-tight text-white/75">You do not currently have a valid ticket.</p>
+                <p className="mt-1.5 text-[14px] font-light tracking-tight text-fg/75">You do not currently have a valid ticket.</p>
               </div>
             ) : (
               valid.map((t) => <TicketCard key={t.id} ticket={t} valid onOpen={() => setOpen(t)} />)
@@ -149,16 +151,17 @@ export default function TicketsPage() {
           <h2 className="px-[15px] pt-5 pb-1.75 text-[13.5px] font-light tracking-tight">Travelcards on your SwissPass</h2>
           <div className="space-y-[8.5px]">
             {USER.travelcards.map((c) => (
-              <button key={c} onClick={() => setCard(c)} className="flex h-[45px] w-full items-center rounded-[19px] bg-surface pr-5 pl-[15.5px] text-left">
+              <button key={c} onClick={() => setCard(c)} className="flex h-[45px] w-full items-center rounded-[19px] bg-surface pr-5 pl-[15.5px] text-left transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
                 <span className="flex-1 text-[15.5px] font-light tracking-tight">{c}</span>
                 <ChevronRight className="size-4.25" strokeWidth={1.5} />
               </button>
             ))}
           </div>
           <div className="h-[calc(109px+var(--home-inset))]" />
+          </div>
         </Overlap>
       ) : (
-        <div className="px-[8.5px]">
+        <div className={cn("px-[8.5px]", DESK_COL)}>
           <h2 className="px-[15px] pt-[28.5px] pb-3 text-[13.5px] font-light tracking-tight">Expired tickets</h2>
           <div className="space-y-[8.5px]">
             {expired.length === 0 && <p className="px-[15px] text-[14.5px] font-light text-muted">No expired tickets.</p>}
@@ -182,7 +185,7 @@ export default function TicketsPage() {
       )}
       {card && (
         <Sheet title={card} onClose={() => setCard(null)}>
-          <p className="px-1 text-[14.5px] leading-snug font-light text-white/85">{TRAVELCARDS[card]?.text}</p>
+          <p className="px-1 text-[14.5px] leading-snug font-light text-fg/85">{TRAVELCARDS[card]?.text}</p>
           <Card className="mt-4 space-y-2 p-4">
             <InfoLine label="Holder" value={`${USER.firstName} ${USER.lastName}`} />
             <InfoLine label="Validity" value={TRAVELCARDS[card]?.validity ?? "–"} />
@@ -210,7 +213,7 @@ function TicketSheet({ ticket, valid, onClose }: { ticket: Ticket; valid: boolea
           <p className="mt-2 text-center text-[12px] font-light text-muted">Demo code — not a valid ticket.</p>
         </>
       ) : (
-        <p className="flex items-center gap-2 px-1 text-[14.5px] font-light text-white/80">
+        <p className="flex items-center gap-2 px-1 text-[14.5px] font-light text-fg/80">
           <QrOffIcon className="size-5 shrink-0" strokeWidth={1.1} /> This ticket has expired.
         </p>
       )}
@@ -276,9 +279,9 @@ function TicketCard({ ticket, valid, onOpen }: { ticket: Ticket; valid?: boolean
   const from = new Date(ticket.validFrom);
   const to = new Date(ticket.validTo);
   return (
-    <button onClick={onOpen} className="flex w-full items-center gap-3.5 rounded-[19px] bg-surface pt-[11.5px] pb-[11px] pr-4 pl-[15.5px] text-left">
+    <button onClick={onOpen} className="flex w-full items-center gap-3.5 rounded-[19px] bg-surface pt-[11.5px] pb-[11px] pr-4 pl-[15.5px] text-left transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
       <div className="min-w-0 flex-1">
-        <p className="text-[11.5px] leading-[15px] font-light tracking-tight text-white/70">
+        <p className="text-[11.5px] leading-[15px] font-light tracking-tight text-fg/70">
           {ticket.product}
           {valid && ` · ${ticket.travelClass === 1 ? "1st" : "2nd"} cl.`}
         </p>
@@ -293,11 +296,11 @@ function TicketCard({ ticket, valid, onOpen }: { ticket: Ticket; valid?: boolean
             </>
           )}
         </p>
-        <p className="text-[11.5px] leading-[17px] font-light tracking-tight text-white/70">
+        <p className="text-[11.5px] leading-[17px] font-light tracking-tight text-fg/70">
           {ticket.to && "via "}
           {ticket.via}
         </p>
-        <p className="text-[12.5px] leading-[17px] font-light tracking-tight text-white/70">
+        <p className="text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
           {formatDate(from)}, {formatTime(ticket.validFrom)} – {formatDate(to) === formatDate(from) ? "" : `${formatDate(to)}, `}
           {formatTime(ticket.validTo)}
         </p>

@@ -92,7 +92,10 @@ export type NovaFare = {
 export type FaresResponse = {
   /** false when the OJP Fare API isn't reachable / subscribed: use the estimate. */
   available: boolean;
+  /** Refs missing here could not be priced this time: ask again. `null` means there is no price. */
   fares: Record<string, NovaFare | null>;
+  /** Set when refs were held back to respect the API's rate limit: ask again after this many ms. */
+  retryAfter?: number;
 };
 
 export type Disruption = {

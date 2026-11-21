@@ -22,10 +22,12 @@ export function RouteMap({ lines, points, className }: { lines: RouteLine[]; poi
       const { lines, points } = data.current;
       const all = [...lines.flatMap((l) => l.coords), ...points.map((p) => [p.lon, p.lat] as [number, number])];
       if (all.length === 0) return;
+      // The theme when the sheet opens; the map lives only as long as the sheet.
+      const dark = document.documentElement.dataset.theme !== "light";
       const bounds = all.reduce((b, c) => b.extend(c), new ml.LngLatBounds(all[0], all[0]));
       map = new ml.Map({
         container: container.current,
-        style: MAP_STYLES.dark.url,
+        style: MAP_STYLES[dark ? "dark" : "light"].url,
         bounds,
         fitBoundsOptions: { padding: 48, maxZoom: 16 },
         attributionControl: { compact: true },
@@ -92,7 +94,7 @@ export function RouteMap({ lines, points, className }: { lines: RouteLine[]; poi
             "text-max-width": 9,
             "text-font": ["Montserrat Medium", "Open Sans Regular", "Noto Sans Regular", "Noto Sans CJK JP Regular"],
           },
-          paint: { "text-color": "#fff", "text-halo-color": "#000", "text-halo-width": 1.4 },
+          paint: { "text-color": dark ? "#fff" : "#111", "text-halo-color": dark ? "#000" : "#fff", "text-halo-width": 1.4 },
         });
       });
     })();

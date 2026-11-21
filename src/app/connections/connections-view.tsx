@@ -1,18 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Header, ErrorBox, Overlap, Spinner } from "@/components/ui";
 import { ConnectionCard } from "@/components/journey";
+import { CheaperNearby, DayPrices } from "@/components/cheaper-nearby";
 import { JourneySearchCard } from "@/components/journey-search-card";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest, type JourneyQuery } from "@/lib/journey-query";
 import { getConnections, type Connection } from "@/lib/transport";
-import { formatLongDate, zurichDateTime } from "@/lib/format";
-import { priceConnection } from "@/lib/pricing";
-import { useNovaFares } from "@/lib/fares";
-import { USER } from "@/lib/mock-data";
+import { formatLongDate, formatShortDate, zurichDateTime } from "@/lib/format";
+import { usePrices, useQuotes } from "@/lib/fares";
+import { CHEAPER_SETTING, cheaperNearby, cheaperThatDay, fetchDay, fetchNearby, plannedAhead, searchWindow, type CheaperPriority } from "@/lib/cheaper";
+import { useSetting } from "@/lib/store";
+import { USER_PASSES } from "@/lib/mock-data";
 import { connectionKey, queryForConnection, uniqueConnections } from "@/lib/connection-key";
+
+type Result = {
+  key: string;
+  items: Connection[] | null;
+  error: string | null;
+  /** The connection the search was for: the first departure, or the last arrival of an arrive-by search. */
+  asked: Connection | null;
+  nearby: Connection[];
+  /** When the results arrived (epoch seconds): nothing earlier can still be caught. */
+  since: number;
+};
 
 export function ConnectionsView() {
   const router = useRouter();
@@ -21,21 +34,36 @@ export function ConnectionsView() {
   const queryKey = sp.toString();
 
   // Results are tagged with the query they belong to, so a new query shows a spinner.
-  const [result, setResult] = useState<{ key: string; items: Connection[] | null; error: string | null }>({ key: "", items: null, error: null });
+  // `asked` is the connection the search was for; `nearby` are departures around it
+  // that aren't listed, fetched only to suggest a cheaper time to leave.
+  const [result, setResult] = useState<Result>({ key: "", items: null, error: null, asked: null, nearby: [], since: 0 });
   const [retry, setRetry] = useState(0);
   const [loadingMore, setLoadingMore] = useState<"earlier" | "later" | null>(null);
   const [showPrices, setShowPrices] = useState(true);
+  const [prefer, setPrefer] = useSetting<CheaperPriority>(CHEAPER_SETTING, "price");
+  // Every departure of the day, scanned only when the traveller asks for the cheapest times.
+  const [day, setDay] = useState<{ key: string; open: boolean; items: Connection[]; scanning: boolean } | null>(null);
+  const dayScan = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const q = journeyFromSearchParams(new URLSearchParams(queryKey));
     if (!q) return;
     const ctrl = new AbortController();
+    const key = `${queryKey}#${retry}`;
     getConnections({ ...toConnectionsRequest(q), limit: 6 }, ctrl.signal)
-      .then((items) => setResult({ key: `${queryKey}#${retry}`, items: uniqueConnections(items), error: null }))
-      .catch(
-        (e: Error) => e.name !== "AbortError" && setResult({ key: `${queryKey}#${retry}`, items: null, error: "Could not load connections." }),
-      );
-    return () => ctrl.abort();
+      .then(async (found) => {
+        const items = uniqueConnections(found);
+        const asked = (q.isArrivalTime ? items.at(-1) : items[0]) ?? null;
+        const since = Date.now() / 1000;
+        setResult({ key, items, error: null, asked, nearby: [], since });
+        if (!asked) return;
+        await fetchNearby(q, asked, items, since, (found) => setResult((r) => (r.key === key ? { ...r, nearby: [...r.nearby, ...found] } : r)), ctrl.signal);
+      })
+      .catch((e: Error) => e.name !== "AbortError" && setResult((r) => (r.key === key ? r : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], since: 0 })));
+    return () => {
+      ctrl.abort();
+      dayScan.current?.abort();
+    };
   }, [queryKey, retry]);
 
   const current = result.key === `${queryKey}#${retry}`;
@@ -43,7 +71,12 @@ export function ConnectionsView() {
   const error = current ? result.error : null;
   const setItems = (fn: (cur: Connection[] | null) => Connection[]) => setResult((r) => ({ ...r, items: fn(r.items) }));
   const load = () => setRetry((n) => n + 1);
-  const fareOf = useNovaFares(items, USER.halfFare);
+  // Only while its sheet is open: a closed sheet shouldn't keep spending the price API's quota.
+  const dayItems = day?.key === result.key && day.open ? day.items : [];
+  const priceOf = usePrices(items, USER_PASSES);
+  // Departures that are only compared with the requested one get a lighter price lookup (the price API is rate limited).
+  const candidates = items ? [...items, ...result.nearby, ...dayItems] : [];
+  const quoteOf = useQuotes(showPrices ? candidates : null, USER_PASSES);
 
   if (!query) {
     return (
@@ -76,6 +109,30 @@ export function ConnectionsView() {
     }
   }
 
+  // Suggestions under both priorities: the switch is only offered when they differ,
+  // i.e. when there is more than one cheaper departure to choose between.
+  const suggest = (p: CheaperPriority) =>
+    showPrices && items && result.asked ? cheaperNearby(result.asked, [...items, ...result.nearby], quoteOf, { earliest: result.since, later: !query.isArrivalTime, prefer: p }) : [];
+  const cheaper = suggest(prefer);
+  const other = suggest(prefer === "price" ? "time" : "price");
+  const hasChoice = cheaper.length !== other.length || cheaper.some((s, i) => connectionKey(s.connection) !== connectionKey(other[i].connection));
+  const asked = showPrices && current ? result.asked : null;
+  const ahead = !!asked && plannedAhead(asked, result.since);
+
+  function openDay() {
+    if (!asked) return;
+    const key = result.key;
+    if (day?.key === key) return setDay({ ...day, open: true });
+    dayScan.current?.abort();
+    const ctrl = (dayScan.current = new AbortController());
+    setDay({ key, open: true, items: [], scanning: true });
+    fetchDay(query!, asked, result.since, (found) => setDay((d) => (d?.key === key ? { ...d, items: [...d.items, ...found] } : d)), ctrl.signal).finally(() =>
+      setDay((d) => (d?.key === key ? { ...d, scanning: false } : d)),
+    );
+  }
+  const dayOpen = asked && day?.open && day.key === result.key ? day : null;
+  const detailHref = (c: Connection) => journeyHref("/connections/detail", queryForConnection(query, c), { key: connectionKey(c) });
+
   // Group by calendar day.
   const groups: { day: string; list: Connection[] }[] = [];
   for (const c of items ?? []) {
@@ -85,65 +142,88 @@ export function ConnectionsView() {
     else groups.push({ day, list: [c] });
   }
 
+  /** First date + "Earlier": under the search card on phones, above the results on desktop. */
+  const firstDay = (className: string) =>
+    groups[0] && (
+      <div className={className}>
+        <h2 className="text-[15px] font-light tracking-tight">{groups[0].day}</h2>
+        <button
+          onClick={() => more("earlier")}
+          disabled={loadingMore === "earlier"}
+          className="flex h-6.75 items-center gap-[3.5px] rounded-full px-[8.5px] text-[12px] font-light text-muted hover:text-fg"
+        >
+          <ChevronUp className="size-3.5" strokeWidth={1.5} />
+          {loadingMore === "earlier" ? "Loading…" : "Earlier"}
+        </button>
+      </div>
+    );
+
   return (
     <div>
       <Header title="Connections" back="/plan" extend />
-      <Overlap>
+      {/* Desktop: the search stays put on the left while the results scroll on the right. */}
+      <div className="lg:mx-auto lg:grid lg:max-w-[1160px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
+      <Overlap className="lg:sticky lg:top-[88px] lg:px-0">
         {/* The search card rests on a darker tray that also carries the first date. */}
-        <div className="rounded-[19px] bg-[#171717]">
+        <div className="rounded-[19px] bg-[#171717] light:bg-[#e4e4e4]">
           <JourneySearchCard query={query} onChange={update} showPrices={showPrices} onShowPricesChange={setShowPrices} />
-          {groups[0] && (
-            <div className="flex h-8.5 items-center justify-between pt-0.5 pr-1.75 pl-[15px]">
-              <h2 className="text-[15px] font-light tracking-tight">{groups[0].day}</h2>
-              <button
-                onClick={() => more("earlier")}
-                disabled={loadingMore === "earlier"}
-                className="flex h-6.75 items-center gap-[3.5px] rounded-full px-[8.5px] text-[12px] font-light text-muted"
-              >
-                <ChevronUp className="size-3.5" strokeWidth={1.5} />
-                {loadingMore === "earlier" ? "Loading…" : "Earlier"}
-              </button>
-            </div>
-          )}
+          {firstDay("flex h-8.5 items-center justify-between pt-0.5 pr-1.75 pl-[15px] lg:hidden")}
         </div>
       </Overlap>
 
+      <div className="lg:mt-6 lg:min-w-0">
+      {firstDay("hidden h-8.5 items-center justify-between pr-1.75 pb-1.5 pl-[15px] lg:flex")}
       {error && <ErrorBox message={error} onRetry={load} />}
       {!items && !error && <Spinner />}
       {items?.length === 0 && <ErrorBox message="No connections found." />}
 
       {items && items.length > 0 && (
-        <div className="mt-px px-[8.5px]">
+        <div className="mt-px px-[8.5px] lg:px-0">
+          {asked && (
+            <CheaperNearby
+              items={cheaper}
+              hrefOf={detailHref}
+              priority={prefer}
+              onPriorityChange={hasChoice ? setPrefer : undefined}
+              window={searchWindow(asked, "price", result.since)}
+              dayLabel={ahead ? `Cheapest times on ${formatShortDate(new Date((asked.from.departureTimestamp ?? 0) * 1000))}` : "Cheapest times today"}
+              onOpenDay={openDay}
+            />
+          )}
           {groups.map((g, gi) => (
             <section key={g.day}>
               {gi > 0 && <h2 className="px-[15px] pt-3.5 pb-[8.5px] text-[15px] font-light tracking-tight">{g.day}</h2>}
               <div className="space-y-1.25">
-                {g.list.map((c) => {
-                  const q = queryForConnection(query, c);
-                  return (
-                    <ConnectionCard
-                      key={connectionKey(c)}
-                      connection={c}
-                      walkMinutes={query.walkMinutes}
-                      price={showPrices ? priceConnection(c, fareOf(c), { halfFare: USER.halfFare })?.secondClass : undefined}
-                      href={journeyHref("/connections/detail", q, { key: connectionKey(c) })}
-                    />
-                  );
-                })}
+                {g.list.map((c) => (
+                  <ConnectionCard key={connectionKey(c)} connection={c} walkMinutes={query.walkMinutes} fare={showPrices ? priceOf(c) : undefined} href={detailHref(c)} />
+                ))}
               </div>
             </section>
           ))}
           <button
             onClick={() => more("later")}
             disabled={loadingMore === "later"}
-            className="mx-auto mt-3.5 flex h-[32px] items-center gap-1.25 rounded-full border border-white/50 bg-surface px-4.25 text-[14.5px] font-light"
+            className="mx-auto mt-3.5 flex h-[32px] items-center gap-1.25 rounded-full border border-fg/50 bg-surface px-4.25 text-[14.5px] font-light transition-colors hover:bg-surface-2"
           >
             <ChevronDown className="size-4.25" strokeWidth={1.5} />
             {loadingMore === "later" ? "Loading…" : "Later connections"}
           </button>
         </div>
       )}
+      </div>
+      </div>
       <div className="h-[calc(109px+var(--home-inset))]" />
+      {dayOpen && asked && (
+        <DayPrices
+          title={ahead ? formatLongDate(new Date((asked.from.departureTimestamp ?? 0) * 1000)) : "Today"}
+          asked={asked}
+          askedFare={quoteOf(asked)}
+          {...cheaperThatDay(asked, candidates, quoteOf, result.since)}
+          scanning={dayOpen.scanning}
+          hrefOf={detailHref}
+          onClose={() => setDay({ ...dayOpen, open: false })}
+        />
+      )}
     </div>
   );
 }

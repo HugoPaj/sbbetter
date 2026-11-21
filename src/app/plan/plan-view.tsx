@@ -13,6 +13,7 @@ import { TouchTimetable } from "@/components/plan/touch-timetable";
 import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint } from "@/lib/use-position";
 import { journeyHref } from "@/lib/journey-query";
 import { nearbyStations } from "@/lib/transport";
+import { useTheme } from "@/lib/theme";
 
 type View = "timetable" | "touch";
 
@@ -27,7 +28,10 @@ export function PlanView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"filter" | "layers" | null>(null);
-  const [mapStyle, setMapStyle] = useState<MapStyleId>("dark");
+  // The base map follows the theme until one is picked under "Map layers".
+  const theme = useTheme();
+  const [pickedStyle, setMapStyle] = useState<MapStyleId | null>(null);
+  const mapStyle = pickedStyle ?? theme;
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [showStops, setShowStops] = useState(true);
   /** "Pick on map": the crosshair in the middle of the map chooses the place. */
@@ -86,17 +90,17 @@ export function PlanView() {
             showStops={showStops}
           />
 
-          {/* Search card: sits on the header skirt, above the map. */}
-          <Overlap>
+          {/* Search card: sits on the header skirt, above the map. Desktop: a floating panel on the left. */}
+          <Overlap className="lg:w-[440px] lg:px-6">
             <div className="flex overflow-hidden rounded-[19px] bg-surface shadow-xl shadow-black/50">
               <div className="relative min-w-0 flex-1">
-                <span aria-hidden className="absolute top-[31.5px] bottom-[31.5px] left-[21.5px] w-px bg-white" />
-                <button onClick={() => setPicking("from")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left">
+                <span aria-hidden className="absolute top-[31.5px] bottom-[31.5px] left-[21.5px] w-px bg-fg" />
+                <button onClick={() => setPicking("from")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left transition-colors hover:bg-fg/5">
                   {from.id === CURRENT_LOCATION ? <TargetIcon className="size-5 shrink-0 text-[#2f8cff]" /> : <StopIcon className="size-5 shrink-0" />}
                   <span className="truncate text-[16px] font-light tracking-tight">{from.name}</span>
                 </button>
                 <div className="ml-11 h-px bg-surface-3" />
-                <button onClick={() => setPicking("to")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left">
+                <button onClick={() => setPicking("to")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left transition-colors hover:bg-fg/5">
                   <StopIcon className="size-5 shrink-0" />
                   <span className="truncate text-[16px] font-light tracking-tight text-muted">{busy ? "Searching…" : "To"}</span>
                 </button>
@@ -106,17 +110,17 @@ export function PlanView() {
                   aria-label="Pick on map"
                   aria-pressed={pickOnMap}
                   onClick={() => setPickOnMap((p) => !p)}
-                  className={cn("flex size-[32px] items-center justify-center rounded-full border border-white/50", pickOnMap && "bg-white text-black")}
+                  className={cn("flex size-[32px] items-center justify-center rounded-full border border-fg/50", pickOnMap && "bg-fg text-page")}
                 >
                   <MapSearchIcon className="size-5" />
                 </button>
               </div>
             </div>
-            {error && <p className="mx-[3.5px] mt-1.75 rounded-xl bg-black/80 px-2.5 py-1.75 text-sm text-sbb-red">{error}</p>}
+            {error && <p className="mx-[3.5px] mt-1.75 rounded-xl bg-page/80 px-2.5 py-1.75 text-sm text-sbb-red">{error}</p>}
           </Overlap>
 
           {/* Floating map controls */}
-          <div className="absolute top-[83px] right-[8.5px] z-10 flex flex-col gap-[8.5px]">
+          <div className="absolute top-[83px] right-[8.5px] z-10 flex flex-col gap-[8.5px] lg:top-6 lg:right-6">
             <MapButton label="Filter" onClick={() => setSheet("filter")} active={hidden.size > 0 || !showStops}>
               <Funnel className="size-5" strokeWidth={1.25} />
             </MapButton>
@@ -132,8 +136,8 @@ export function PlanView() {
             <>
               {/* Crosshair pin: its tip marks the map centre. */}
               <MapPin aria-hidden className="pointer-events-none absolute top-1/2 left-1/2 z-10 size-9 -translate-x-1/2 -translate-y-full fill-sbb-red text-white drop-shadow-lg" strokeWidth={1.25} />
-              <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+94px)] z-10 rounded-[19px] bg-[#171717] p-3 shadow-xl shadow-black/60">
-                <p className="px-1 pb-2.5 text-[13.5px] font-light tracking-tight text-white/85">Move the map to place the pin, then choose:</p>
+              <div className="absolute inset-x-[8.5px] bottom-[calc(var(--home-inset)+94px)] z-10 rounded-[19px] bg-[#171717] p-3 light:bg-white shadow-xl shadow-black/60 lg:right-auto lg:left-1/2 lg:w-[420px] lg:-translate-x-1/2">
+                <p className="px-1 pb-2.5 text-[13.5px] font-light tracking-tight text-fg/85">Move the map to place the pin, then choose:</p>
                 <div className="flex gap-2">
                   <OutlineButton
                     onClick={() => {
@@ -159,7 +163,7 @@ export function PlanView() {
           ) : (
             <button
               onClick={openNearestBoard}
-              className="absolute bottom-[calc(var(--home-inset)+94px)] left-1/2 z-10 flex h-[31px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/50 bg-[#141414] px-3.5 text-[16px] font-light tracking-tight whitespace-nowrap group-has-[.maplibregl-compact-show]:invisible"
+              className="absolute bottom-[calc(var(--home-inset)+94px)] left-1/2 z-10 flex h-[31px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-fg/50 bg-[#141414] light:bg-white px-3.5 text-[16px] font-light tracking-tight whitespace-nowrap transition-colors group-has-[.maplibregl-compact-show]:invisible hover:bg-[#2a2a2a] light:hover:bg-[#ececec] lg:group-has-[.maplibregl-compact-show]:visible"
             >
               <BoardIcon className="size-[22px]" /> Departure board
             </button>
@@ -247,9 +251,9 @@ const MODE_CATEGORY: Record<string, string> = { train: "IR", bus: "B", tram: "T"
 
 function MapButton({ children, label, onClick, active }: { children: React.ReactNode; label: string; onClick?: () => void; active?: boolean }) {
   return (
-    <button aria-label={label} onClick={onClick} className="relative flex size-[44px] items-center justify-center rounded-full border border-white/50 bg-[#141414]">
+    <button aria-label={label} onClick={onClick} className="relative flex size-[44px] items-center justify-center rounded-full border border-fg/50 bg-[#141414] light:bg-white transition-colors hover:bg-[#2a2a2a] light:hover:bg-[#ececec]">
       {children}
-      {active && <span aria-hidden className="absolute top-0 right-0 size-3 rounded-full border-2 border-[#141414] bg-sbb-red" />}
+      {active && <span aria-hidden className="absolute top-0 right-0 size-3 rounded-full border-2 border-[#141414] light:border-white bg-sbb-red" />}
     </button>
   );
 }

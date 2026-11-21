@@ -4,6 +4,7 @@ import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import type { Connection, Journey, Section } from "@/lib/transport";
 import { formatMinutes, formatTime, parseApiDuration } from "@/lib/format";
+import { passTag, type Fare } from "@/lib/pricing";
 import { ModeGlyph, PersonGlyph, WalkIcon, type Mode } from "./icons";
 import { cn } from "./ui";
 
@@ -24,7 +25,7 @@ export function modeOf(category: string): Mode {
 export function ModeBadge({ category, className }: { category: string; className?: string }) {
   const mode = modeOf(category);
   return (
-    <span className={cn("relative inline-flex size-5 shrink-0 items-center justify-center rounded-[1.5px] bg-sbb-blue", className)}>
+    <span className={cn("relative inline-flex size-5 shrink-0 items-center justify-center rounded-[1.5px] bg-sbb-blue text-white", className)}>
       <ModeGlyph mode={mode} className="size-[88%]" />
       {mode === "metro" && <span className="absolute top-[3%] left-[10%] text-[4.5px] leading-none font-bold">Metro</span>}
     </span>
@@ -38,7 +39,7 @@ export function LineLabel({ journey, className }: { journey: Pick<Journey, "cate
     return (
       <span
         className={cn(
-          "inline-flex shrink-0 items-center rounded-[2.5px] border-[1.5px] border-white px-1.25 text-[15.5px] leading-[18px] font-bold whitespace-nowrap",
+          "inline-flex shrink-0 items-center rounded-[2.5px] border-[1.5px] border-current px-1.25 text-[15.5px] leading-[18px] font-bold whitespace-nowrap",
           className,
         )}
       >
@@ -59,7 +60,7 @@ function Occupancy({ level }: { level: number | null }) {
   return (
     <span className="inline-flex items-end gap-px" aria-label={level ? `Occupancy ${level} of 3` : "Occupancy unknown"}>
       {[1, 2, 3].map((i) => (
-        <PersonGlyph key={i} className={cn("h-[11px] w-[5px]", (level ?? 0) >= i ? "text-white" : "text-white/35")} />
+        <PersonGlyph key={i} className={cn("h-[11px] w-[5px]", (level ?? 0) >= i ? "text-fg" : "text-fg/35")} />
       ))}
     </span>
   );
@@ -90,16 +91,16 @@ export function Timeline({ connection, className }: { connection: Connection; cl
 
   return (
     <div className={cn("relative h-5 min-w-0 flex-1", className)}>
-      <div className="absolute top-1/2 right-[3.5px] left-[3.5px] h-[1.5px] -translate-y-1/2 bg-white" />
-      <span className="absolute top-1/2 left-0 size-2.5 -translate-y-1/2 rounded-full bg-white" />
+      <div className="absolute top-1/2 right-[3.5px] left-[3.5px] h-[1.5px] -translate-y-1/2 bg-fg" />
+      <span className="absolute top-1/2 left-0 size-2.5 -translate-y-1/2 rounded-full bg-fg" />
       {transfers.map((p, i) => (
         <span
           key={i}
-          className="absolute top-1/2 size-[8.5px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-surface"
+          className="absolute top-1/2 size-[8.5px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-fg bg-surface"
           style={{ left: `${Math.min(90, Math.max(10, p * 100))}%` }}
         />
       ))}
-      <span className="absolute top-1/2 right-0 size-2.5 -translate-y-1/2 rounded-full bg-white" />
+      <span className="absolute top-1/2 right-0 size-2.5 -translate-y-1/2 rounded-full bg-fg" />
     </div>
   );
 }
@@ -111,7 +112,7 @@ export function firstJourney(c: Connection): Journey | null {
 export function WalkBadge({ minutes }: { minutes?: number }) {
   if (!minutes) return null;
   return (
-    <span className="inline-flex items-center text-white">
+    <span className="inline-flex items-center text-fg">
       <WalkIcon className="-mr-px -ml-[2.5px] size-4.25" />
       <span className="text-[12px] font-light">{minutes}&apos;</span>
     </span>
@@ -121,27 +122,32 @@ export function WalkBadge({ minutes }: { minutes?: number }) {
 export function ConnectionCard({
   connection,
   href,
-  price,
+  fare,
   walkMinutes,
 }: {
   connection: Connection;
   href: string;
-  price?: number;
+  /** 2nd class price with the traveller's travelcards; null while loading, undefined to hide prices. */
+  fare?: Fare | null;
   walkMinutes?: number;
 }) {
+  const price = fare?.secondClass;
+  const pass = fare?.pass;
   const j = firstJourney(connection);
   const walk = connection.accessWalk?.minutes ?? walkMinutes;
   const disruption = connection.disruptions?.[0];
   const dep = connection.from.prognosis?.departure ?? connection.from.departure;
   const delayed = (connection.from.delay ?? 0) > 0;
   return (
-    <Link href={href} className="relative block overflow-hidden rounded-[19px] bg-surface px-[15px] pt-[15px] pb-[15px]">
+    <Link href={href} className="relative block overflow-hidden rounded-[19px] bg-surface px-[15px] pt-[15px] pb-[15px] transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
       {price !== undefined && (
-        <span className="absolute top-0 right-0 z-0 flex h-[21px] items-baseline gap-[3.5px] pr-[12px] pl-3.5 text-[12px] leading-[21px] font-bold whitespace-nowrap before:absolute before:inset-0 before:-right-1.75 before:-z-10 before:origin-top before:skew-x-[14deg] before:rounded-bl-[7.5px] before:border-b before:border-l before:border-white/40">
-          from CHF <span className="text-[15.5px]">{price.toFixed(2)}</span>
+        <span className="absolute top-0 right-0 z-0 flex h-[21px] items-baseline gap-[3.5px] pr-[12px] pl-3.5 text-[12px] leading-[21px] font-bold whitespace-nowrap before:absolute before:inset-0 before:-right-1.75 before:-z-10 before:origin-top before:skew-x-[14deg] before:rounded-bl-[7.5px] before:border-b before:border-l before:border-fg/40">
+          {!pass && "from "}CHF <span className="text-[15.5px]">{price.toFixed(2)}</span>
+          {/* What a travelcard leaves to pay; the connection page says for which stretch. */}
+          {pass && <span className="font-light text-ok">{passTag(pass)}</span>}
         </span>
       )}
-      <div className={cn("flex h-5 items-center gap-[5px]", price !== undefined && "pr-[112px]")}>
+      <div className={cn("flex h-5 items-center gap-[5px]", price !== undefined && (pass ? "pr-[168px]" : "pr-[112px]"))}>
         {j ? (
           <>
             <ModeBadge category={j.category} />

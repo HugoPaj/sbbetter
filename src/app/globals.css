@@ -1,10 +1,16 @@
 @import "tailwindcss";
 
 /*
- * SBB-like dark theme tokens. The app currently ships dark mode only
- * (matches the reference screenshots).
+ * SBB-like theme tokens. These are the dark values (they match the reference
+ * screenshots); light mode overrides them below. Use `fg` / `page` where the
+ * dark design says white / black, so both themes work; plain `white` and `black`
+ * stay literal (text on red, the QR code, shadows).
  */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
 @theme {
+  --color-fg: #fff;
+  --color-page: #000;
   --color-sbb-red: #eb0000;
   --color-sbb-red-dark: #c60018;
   --color-sbb-red-deep: #a20013;
@@ -22,6 +28,10 @@
 
 :root {
   color-scheme: dark;
+  /* Behind the phone column in a narrow desktop window. */
+  --color-backdrop: #0d0d0d;
+  /* Tab bar. */
+  --color-bar: #222;
   /*
    * Space under the tab bar for the iPhone home indicator. The native app always
    * reserves ~34pt; in a browser tab env() is 0, so keep at least that.
@@ -29,10 +39,26 @@
   --home-inset: max(env(safe-area-inset-bottom), 34px);
 }
 
+/* Light mode: `data-theme` is set on <html> before first paint (see layout.tsx and lib/theme.ts). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-fg: #1a1a1a;
+  --color-page: #f2f2f2;
+  --color-surface: #fff;
+  --color-surface-2: #ebebeb;
+  --color-surface-3: #d9d9d9;
+  --color-line: #e3e3e3;
+  --color-muted: #666;
+  --color-dim: #8c8c8c;
+  --color-ok: #188048;
+  --color-backdrop: #dcdcdc;
+  --color-bar: #fff;
+}
+
 html,
 body {
-  background: #0d0d0d;
-  color: #fff;
+  background: var(--color-backdrop);
+  color: var(--color-fg);
 }
 
 body {
@@ -82,6 +108,17 @@ body {
   right: 3px;
   background-color: transparent;
   filter: invert(1);
+}
+[data-theme="light"] .maplibregl-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+  border-color: rgba(0, 0, 0, 0.35);
+  background: #fff;
+  color: #555;
+}
+[data-theme="light"] .maplibregl-map .maplibregl-ctrl-attrib a {
+  color: #333;
+}
+[data-theme="light"] .maplibregl-map .maplibregl-ctrl-attrib-button {
+  filter: none;
 }
 
 @keyframes sheet-up {
@@ -149,5 +186,45 @@ body {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+}
+
+/*
+ * Desktop (>= 1024px, Tailwind's `lg`). Phones and tablets never get here: their
+ * layout viewport is fixed at 393px (see `viewport` in layout.tsx), so everything
+ * below, and every `lg:` class in the app, only applies to desktop browsers.
+ */
+@media (min-width: 1024px) {
+  :root {
+    /*
+     * There is no tab bar on desktop (the side navigation replaces it). Every bottom
+     * offset in the app is written as `77px tab bar + --home-inset + gap`, so a
+     * negative inset cancels the bar and leaves just the gap.
+     */
+    --home-inset: -77px;
+  }
+
+  button:not(:disabled),
+  [role="tab"],
+  [role="radio"],
+  [role="checkbox"],
+  [role="switch"] {
+    cursor: pointer;
+  }
+
+  /* Connection map: the trip panel floats in the left corner, so the attribution stays in its own. */
+  .connection-map .maplibregl-map .maplibregl-ctrl-bottom-right {
+    bottom: 8px;
+  }
+
+  /* Sheets are centred dialogs here: they pop in instead of sliding up. */
+  .animate-sheet-up {
+    animation: pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
   }
 }

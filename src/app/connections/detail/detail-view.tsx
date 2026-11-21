@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useState, useSyncExternalStore, type 
 import { useRouter, useSearchParams } from "next/navigation";
 import { flushSync } from "react-dom";
 import { ArrowRightLeft, CalendarPlus, ChevronDown, ChevronRight, EllipsisVertical, FlaskConical, Share2, Star, Ticket, TriangleAlert } from "lucide-react";
-import { Card, ErrorBox, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Radio, RoundButton, Sheet, Spinner, cn, toast } from "@/components/ui";
+import { Card, ErrorBox, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Radio, RoundButton, Sheet, Spinner, cn, toast, useIsDesktop } from "@/components/ui";
 import { DepartureBoard } from "@/components/plan/departure-board";
 import { RouteMap } from "@/components/plan/route-map";
 import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
@@ -15,9 +15,9 @@ import { VerdictBanner } from "@/components/verdict-card";
 import { connectionKey, loadConnection, queryForConnection, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { SCENARIOS, assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
-import { priceConnection } from "@/lib/pricing";
-import { useNovaFares } from "@/lib/fares";
-import { USER } from "@/lib/mock-data";
+import { passNotice, type PassSaving } from "@/lib/pricing";
+import { usePrices } from "@/lib/fares";
+import { USER_PASSES } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import { getConnections, type Checkpoint, type Connection, type Disruption, type Section } from "@/lib/transport";
 
@@ -76,6 +76,8 @@ export function DetailView() {
   /** Demo: a pretend "now" to preview the progress along the journey (More → "Simulate journey progress"). */
   const [simNow, setSimNow] = useState<number | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
+  // Desktop shows the itinerary and the map side by side, so there is no map mode to switch to.
+  const desktop = useIsDesktop();
   const [topInset, setTopInset] = useState(0);
   /** Bottom edge of the summary card + buttons, measured from the top of the map. */
   const summaryRef = useCallback((el: HTMLElement | null) => {
@@ -120,13 +122,19 @@ export function DetailView() {
     return () => ctrl.abort();
   }, [conn, raw, scenario, assessId]);
 
-  const fareOf = useNovaFares(conn ? [conn] : null, USER.halfFare);
+  const priceOf = usePrices(conn ? [conn] : null, USER_PASSES);
   if (!query) return <ErrorBox message="No journey selected." />;
 
   const verdict = scenario && assessed.id === assessId ? assessed.verdict : null;
   const checking = !!scenario && !!conn && assessed.id !== assessId;
   const saved = trips.some((t) => t.id === tripId);
-  const price = conn ? (priceConnection(conn, fareOf(conn), { halfFare: USER.halfFare })?.secondClass ?? null) : null;
+  const fare = conn ? priceOf(conn) : null;
+  const price = fare?.secondClass ?? null;
+  // What a travelcard changes about the ticket; not while a disruption says to take another route.
+  const pass = !verdict?.alternative ? fare?.pass : undefined;
+  /** The traveller's own trip needs no ticket: only upgrades and tickets for people travelling along are left to sell. */
+  const covered = !!fare?.pass && price === 0;
+  const offersHref = journeyHref("/offers", query, { key: key ?? "", ...rParams });
   const fromLabel = query.fromName === "Current location" ? "Your chosen location" : query.fromName;
   const walk = conn?.accessWalk?.minutes ?? query.walkMinutes;
 
@@ -308,17 +316,19 @@ export function DetailView() {
         box && l.kind === "ride" && l.section === conn.sections[brokenAt] ? { ...l, instead: <Instead box={box} /> } : l,
       );
 
-  const mapMode = view === "map" && !!conn;
+  const mapMode = !desktop && view === "map" && !!conn;
   const toggleView = () => {
     if (!conn) return toast("The connection is still loading.");
     window.scrollTo(0, 0);
     setView((v) => (v === "map" ? "list" : "map"));
   };
-  const ring = mapMode ? "" : "ring-[5px] ring-black";
+  const ring = mapMode ? "" : "ring-[5px] ring-page";
 
   return (
     <div className={mapMode ? "flex h-dvh flex-col overflow-hidden" : undefined}>
       <Header title="Connection" back extend />
+      {/* Desktop: the itinerary is a column on the left; the map fills the rest (see <aside> below). */}
+      <div className="contents lg:block lg:w-[520px] lg:px-4">
       <div className={mapMode ? "relative min-h-0 flex-1" : undefined}>
       {mapMode && <TripMap connection={conn} origin={origin} fromLabel={fromLabel} accessWalk={walk} topInset={Math.max(0, topInset - 24)} onWalk={setWalkSheet} />}
       <Overlap>
@@ -337,9 +347,9 @@ export function DetailView() {
             label={saved ? "Remove from trips" : "Save trip"}
             onClick={toggleSaved}
           >
-            <Star className={cn("size-6", saved && "fill-white")} strokeWidth={1.1} />
+            <Star className={cn("size-6", saved && "fill-fg")} strokeWidth={1.1} />
           </RoundButton>
-          <RoundButton label={mapMode ? "Show as list" : "Show on map"} className={ring} onClick={toggleView}>
+          <RoundButton label={mapMode ? "Show as list" : "Show on map"} className={cn(ring, "lg:hidden")} onClick={toggleView}>
             {mapMode ? <ItineraryIcon className="size-6" strokeWidth={1.1} /> : <MapPinIcon className="size-6" strokeWidth={1.1} />}
           </RoundButton>
           <div className="flex-1" />
@@ -358,11 +368,12 @@ export function DetailView() {
         <div className="mt-4 space-y-4.25 px-[8.5px]">
           <Itinerary
             header={
-              checking || verdict || conn.disruptions?.length ? (
+              checking || verdict || conn.disruptions?.length || pass ? (
                 <>
                   {checking && <p className="text-[14.5px] font-light text-muted">Checking your journey…</p>}
                   {verdict && <VerdictBanner verdict={verdict} />}
-                  {conn.disruptions?.map((d, i) => <DisruptionNotice key={i} disruption={d} />)}
+                  {!!conn.disruptions?.length && <DisruptionNotices disruptions={conn.disruptions} />}
+                  {pass && <PassNotice pass={pass} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
                 </>
               ) : null
             }
@@ -373,12 +384,26 @@ export function DetailView() {
         </div>
       )}
       {!mapMode && <div className="h-[calc(177px+var(--home-inset))]" />}
+      </div>
+
+      {desktop && conn && (
+        <aside aria-label="Map" className="fixed top-16 right-0 bottom-0 left-[768px] overflow-hidden border-l border-fg/10 bg-[#111] light:bg-[#e9e9e9]">
+          {/* Keyed by the connection: a re-route draws a new line. */}
+          <TripMap key={connectionKey(conn)} connection={conn} origin={origin} fromLabel={fromLabel} accessWalk={walk} topInset={0} onWalk={setWalkSheet} />
+        </aside>
+      )}
 
       {conn && !mapMode && price !== null && !verdict?.alternative && (
-        <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px]">
-          <PrimaryButton href={journeyHref("/offers", query, { key: key ?? "", ...rParams })}>
-            Tickets from&nbsp;<b className="font-bold">CHF {price.toFixed(2)}</b>
-          </PrimaryButton>
+        <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px] lg:left-[248px] lg:w-[520px] lg:max-w-none lg:translate-x-0 lg:px-[24.5px]">
+          {covered ? (
+            <OutlineButton href={offersHref} className="shadow-lg shadow-black/40">
+              Class upgrade or co-travellers
+            </OutlineButton>
+          ) : (
+            <PrimaryButton href={offersHref}>
+              Tickets from&nbsp;<b className="font-bold">CHF {price.toFixed(2)}</b>
+            </PrimaryButton>
+          )}
         </div>
       )}
 
@@ -396,7 +421,7 @@ export function DetailView() {
               }}
             />
             <ListRow icon={ArrowRightLeft} label="Return journey" onClick={returnJourney} />
-            <ListRow icon={Ticket} label="Buy ticket" href={journeyHref("/offers", query, { key: key ?? "", ...rParams })} />
+            <ListRow icon={Ticket} label={covered ? "Class upgrade or co-travellers" : "Buy ticket"} href={offersHref} />
             <ListRow icon={FlaskConical} label="Simulate a disruption (demo)" onClick={() => setSheet("sim")} />
             <ListRow icon={FlaskConical} label="Simulate journey progress (demo)" onClick={() => setSheet("time")} />
           </Card>
@@ -423,7 +448,7 @@ export function DetailView() {
                       setPicked({ for: assessId, connection: c });
                       setOthers(null);
                     }}
-                    className={cn("flex w-full items-center gap-3 rounded-[15px] border px-3.5 py-3 text-left", active ? "border-white" : "border-white/25")}
+                    className={cn("flex w-full items-center gap-3 rounded-[15px] border px-3.5 py-3 text-left", active ? "border-fg" : "border-fg/25")}
                   >
                     <span className="w-[42px] shrink-0 text-[15.5px] font-bold tracking-[-0.04em] tabular-nums">{formatTime((ride ?? c.sections[0])?.departure.departure ?? c.from.departure)}</span>
                     <span className="min-w-0 flex-1">
@@ -532,18 +557,50 @@ function StopButton({ checkpoint, onStop, className }: { checkpoint: Checkpoint;
 
 const GRID = "grid grid-cols-[49.5px_20px_minmax(0,1fr)]";
 
+/** What the traveller's travelcard means for this trip's ticket, at the head of the timeline. */
+function PassNotice({ pass, trip }: { pass: PassSaving; trip: { from: string | null; to: string | null } }) {
+  const { headline, detail } = passNotice(pass, trip);
+  return (
+    <div className="flex items-start gap-2.5">
+      <Ticket className="mt-px size-4.5 shrink-0 text-ok" strokeWidth={2} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[14.5px] leading-snug font-bold">{headline}</p>
+        <p className="mt-0.5 text-[13px] leading-snug font-light text-fg/80">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
 /** A live service message, shown at the head of the timeline. */
-function DisruptionNotice({ disruption }: { disruption: Disruption }) {
+/**
+ * Live service messages at the head of the timeline: one alert row, however many there are.
+ * Several collapse into "2 service alerts on your route", expanding to each summary.
+ */
+function DisruptionNotices({ disruptions }: { disruptions: Disruption[] }) {
   const [open, setOpen] = useState(false);
-  const more = disruption.description || disruption.reason;
+  const single = disruptions.length === 1;
+  const more = (d: Disruption) => d.description || d.reason;
+  const expandable = !single || !!more(disruptions[0]);
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={!more} className="flex w-full items-start gap-2.5 text-left">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={!expandable} className="flex w-full items-start gap-2.5 text-left">
         <TriangleAlert className="mt-px size-4.5 shrink-0 text-sbb-red" strokeWidth={2} />
-        <span className="flex-1 text-[14.5px] leading-snug font-bold">{disruption.summary}</span>
-        {more && <ChevronDown className={cn("mt-px size-4.25 shrink-0 transition-transform", open && "rotate-180")} strokeWidth={1.5} />}
+        <span className="flex-1 text-[14.5px] leading-snug font-bold">{single ? disruptions[0].summary : `${disruptions.length} service alerts on your route`}</span>
+        {expandable && <ChevronDown className={cn("mt-px size-4.25 shrink-0 transition-transform", open && "rotate-180")} strokeWidth={1.5} />}
       </button>
-      {open && more && <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-white/80">{more}</p>}
+      {open &&
+        (single ? (
+          <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{more(disruptions[0])}</p>
+        ) : (
+          <ul className="mt-2 space-y-2 pl-7">
+            {disruptions.map((d, i) => (
+              <li key={i} className="text-[13px] leading-snug">
+                <p className="font-bold">{d.summary}</p>
+                {more(d) && <p className="mt-0.5 font-light text-fg/80">{more(d)}</p>}
+              </li>
+            ))}
+          </ul>
+        ))}
     </div>
   );
 }
@@ -649,11 +706,11 @@ function buildItems(legs: Leg[], after?: Node): Item[] {
 
 const LINE = "absolute left-1/2 -translate-x-1/2";
 /** Two rail styles only: solid for riding, dotted for walking. Travelled is bright, ahead is dimmed. */
-const lineStyle = (leg: Leg) => (leg.kind === "walk" ? "w-0 border-l-[3px] border-dotted border-white" : "w-[3px] bg-white");
+const lineStyle = (leg: Leg) => (leg.kind === "walk" ? "w-0 border-l-[3px] border-dotted border-fg" : "w-[3px] bg-fg");
 const legOf = (item?: Item) => (item?.type === "leg" ? item.leg : null);
 const gone = (leg: Leg) => leg.kind === "ride" && (leg.status?.kind === "cancelled" || leg.status?.kind === "missed");
 /** The "you are here" look, shared by the marker on a rail and the stop being waited at. */
-const HERE = "ring-4 ring-white/25";
+const HERE = "ring-4 ring-fg/25";
 
 type Span = { t0: number; t1: number; /** Never travelled: a leg that no longer works, or one after it. */ off: boolean };
 
@@ -702,7 +759,7 @@ function moments(items: Item[]): { label: string; at: number }[] {
 }
 
 function Pill({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-white/12 px-1.75 text-[12px] leading-[18px] font-bold whitespace-nowrap text-white/85">{children}</span>;
+  return <span className="rounded-full bg-fg/12 px-1.75 text-[12px] leading-[18px] font-bold whitespace-nowrap text-fg/85">{children}</span>;
 }
 
 /**
@@ -753,7 +810,7 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
               <span className={cn(rail, "opacity-35")} />
               <span className={cn(rail, "transition-[clip-path]", MOVE)} style={{ clipPath: `inset(0 0 ${(1 - done[i]) * 100}% 0)` }} />
               {done[i] > 0 && done[i] < 1 && (
-                <span className={cn("absolute left-1/2 size-3.5 -translate-1/2 rounded-full bg-white transition-[top]", HERE, MOVE)} style={{ top: `calc(10px + ${done[i] * 100}%)` }} />
+                <span className={cn("absolute left-1/2 size-3.5 -translate-1/2 rounded-full bg-fg transition-[top]", HERE, MOVE)} style={{ top: `calc(10px + ${done[i] * 100}%)` }} />
               )}
             </span>
           );
@@ -783,7 +840,7 @@ function Itinerary({ legs, now, header, onStop }: { legs: Leg[]; /** Seconds; nu
                   className={cn(
                     "absolute top-2.5 left-1/2 size-3.5 -translate-1/2 rounded-full border-[3px] transition-colors",
                     MOVE,
-                    reached ? "border-white bg-white" : cn("bg-surface", off ? "border-white/40" : n.delayed ? "border-sbb-red" : "border-white"),
+                    reached ? "border-fg bg-fg" : cn("bg-surface", off ? "border-fg/40" : n.delayed ? "border-sbb-red" : "border-fg"),
                     here && HERE,
                   )}
                 />
@@ -818,7 +875,7 @@ function Segment({ leg, style, onStop }: { leg: Leg; style: CSSProperties; onSto
   if (leg.kind === "walk") {
     const m = leg.metres ?? leg.minutes * 75;
     return (
-      <button onClick={() => leg.onOpen(m)} style={style} className="col-start-3 my-3 ml-3 flex items-center gap-2 rounded-full border border-white/30 py-2 pr-3 pl-3.5 text-left text-[14.5px] leading-5 font-light">
+      <button onClick={() => leg.onOpen(m)} style={style} className="col-start-3 my-3 ml-3 flex items-center gap-2 rounded-full border border-fg/30 py-2 pr-3 pl-3.5 text-left text-[14.5px] leading-5 font-light">
         <WalkIcon className="size-4.25 shrink-0" />
         Walk {Math.max(1, leg.minutes)} min · {m} m
         <ChevronRight className="ml-auto size-4.25 shrink-0" strokeWidth={1.5} />
@@ -845,7 +902,7 @@ function Segment({ leg, style, onStop }: { leg: Leg; style: CSSProperties; onSto
       {open && (
         <ul className="mt-1.75 space-y-1.25">
           {stops.map((p, i) => (
-            <li key={i} className="flex gap-2.5 text-[13px] font-light text-white/80">
+            <li key={i} className="flex gap-2.5 text-[13px] font-light text-fg/80">
               <span className="w-9.25 shrink-0 tabular-nums">{formatTime(p.departure ?? p.arrival)}</span>
               <StopButton checkpoint={p} onStop={onStop} />
             </li>
@@ -862,7 +919,7 @@ function Instead({ box }: { box: Box }) {
   const [open, setOpen] = useState(false);
   const rides = box.connection.sections.filter((s) => s.journey);
   return (
-    <div className="mt-3.5 rounded-[15px] border border-white/25 bg-black/35 px-3 pt-3 pb-3.5">
+    <div className="mt-3.5 rounded-[15px] border border-fg/25 bg-page/35 px-3 pt-3 pb-3.5">
       <p className="text-[12px] font-bold tracking-wide text-muted uppercase">Take instead</p>
       <ul className={cn("mt-2 space-y-2.5", open && "hidden")}>
         {rides.map((s, i) => {
@@ -876,7 +933,7 @@ function Instead({ box }: { box: Box }) {
                 <LineLabel journey={j} />
                 {pl && <span className="ml-auto text-[14.5px] font-bold whitespace-nowrap">{pl}</span>}
               </div>
-              <p className="mt-0.5 pl-[49px] text-[13px] leading-snug font-light text-white/80">
+              <p className="mt-0.5 pl-[49px] text-[13px] leading-snug font-light text-fg/80">
                 to {s.arrival.station.name}
                 {i < rides.length - 1 && `, ${formatTime(s.arrival.arrival)}`}
               </p>
@@ -924,11 +981,11 @@ function MiniTimeline({ connection }: { connection: Connection }) {
       down: next,
     });
   });
-  const rail = (s: Section) => (s.journey ? "w-[2px] bg-white" : "w-0 border-l-2 border-dotted border-white/55");
+  const rail = (s: Section) => (s.journey ? "w-[2px] bg-fg" : "w-0 border-l-2 border-dotted border-fg/55");
   const last = rows.length - 1;
 
   return (
-    <div className="mt-3 grid grid-cols-[42px_16px_minmax(0,1fr)] border-t border-white/15 pt-3.5 text-[14.5px] tracking-tight">
+    <div className="mt-3 grid grid-cols-[42px_16px_minmax(0,1fr)] border-t border-fg/15 pt-3.5 text-[14.5px] tracking-tight">
       {rows.map((r, i) =>
         r.kind === "stop" ? (
           <Fragment key={i}>
@@ -936,7 +993,7 @@ function MiniTimeline({ connection }: { connection: Connection }) {
             <span className="relative">
               {r.up && <span className={cn(LINE, "top-0 h-2.5", rail(r.up))} />}
               {r.down && <span className={cn(LINE, "top-2.5 bottom-0", rail(r.down))} />}
-              <span className={cn("absolute top-2.5 left-1/2 size-2.5 -translate-1/2 rounded-full border-2 border-white", i === last ? "bg-white" : "bg-[#141414]")} />
+              <span className={cn("absolute top-2.5 left-1/2 size-2.5 -translate-1/2 rounded-full border-2 border-fg", i === last ? "bg-fg" : "bg-[#141414] light:bg-white")} />
             </span>
             <span className="flex items-start justify-between gap-2 pl-2.5 leading-5">
               <span className="font-bold">{r.name}</span>
@@ -949,7 +1006,7 @@ function MiniTimeline({ connection }: { connection: Connection }) {
             <span className="relative">
               <span className={cn(LINE, "inset-y-0", rail(r.section))} />
             </span>
-            <div className="py-2.5 pl-2.5 text-[13px] leading-snug font-light text-white/80">
+            <div className="py-2.5 pl-2.5 text-[13px] leading-snug font-light text-fg/80">
               {r.section.journey ? (
                 <>
                   <div className="flex items-center gap-1.5">
