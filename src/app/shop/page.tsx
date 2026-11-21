@@ -10,7 +10,8 @@ import { CURRENT_LOCATION } from "@/lib/use-position";
 import { actions, useAppState, useSetting, type Ticket } from "@/lib/store";
 import { formatDate, formatTime } from "@/lib/format";
 import { DogIcon, TicketIcon } from "@/components/icons";
-import { USER_PASSES, fullName } from "@/lib/mock-data";
+import { fullName } from "@/lib/mock-data";
+import { usePasses } from "@/lib/travelcards";
 import { passCovering, passCoveringRestOfDay } from "@/lib/passes";
 import { usePosition } from "@/lib/use-position";
 
@@ -176,6 +177,7 @@ export default function ShopPage() {
 
 function ProductSheet({ product, place, onClose }: { product: Product; place: string; onClose: () => void }) {
   const router = useRouter();
+  const passes = usePasses();
   const { plates } = useAppState();
   const [klass, setKlass] = useState<"2" | "1">("2");
   const [plate, setPlate] = useState(plates[0] ?? "");
@@ -188,8 +190,8 @@ function ProductSheet({ product, place, onClose }: { product: Product; place: st
   const coveredBy =
     product.travel && klass === "2"
       ? product.minutes
-        ? passCovering(USER_PASSES, openedAt, openedAt + product.minutes * 60_000, local)
-        : passCoveringRestOfDay(USER_PASSES, openedAt, local)
+        ? passCovering(passes, openedAt, openedAt + product.minutes * 60_000, local)
+        : passCoveringRestOfDay(passes, openedAt, local)
       : null;
 
   function buy() {

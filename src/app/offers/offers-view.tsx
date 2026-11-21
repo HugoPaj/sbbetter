@@ -12,13 +12,15 @@ import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/co
 import { cityOf, passSummary } from "@/lib/pricing";
 import { usePrices } from "@/lib/fares";
 import { formatShortDate, formatTime } from "@/lib/format";
-import { USER, USER_PASSES, fullName } from "@/lib/mock-data";
+import { fullName } from "@/lib/mock-data";
+import { usePasses } from "@/lib/travelcards";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Connection } from "@/lib/transport";
 
 type Offer = "regular" | "supersaver" | "p2p";
 
 export function OffersView() {
+  const passes = usePasses();
   const router = useRouter();
   const sp = useSearchParams();
   const raw = sp.toString();
@@ -50,7 +52,7 @@ export function OffersView() {
     return () => ctrl.abort();
   }, [raw, key]);
 
-  const priceOf = usePrices(conn ? [conn] : null, USER_PASSES);
+  const priceOf = usePrices(conn ? [conn] : null, passes);
   if (!query) return <ErrorBox message="No journey selected." />;
 
   // With a travelcard covering part of the trip, the ticket is for the uncovered stretch only,
@@ -287,7 +289,7 @@ export function OffersView() {
             <Line label="Route" value={pass?.tickets.length && klass === "2" ? pass.tickets.map((t) => `${t.from} → ${t.to}`).join(", ") : `${fromName} → ${toName}`} />
             <Line label="Class" value={effectiveClass === 1 ? "1st class" : "2nd class"} />
             <Line label="Ticket" value={isReturn ? "Return" : "Single"} />
-            {(USER.halfFare || pass) && <Line label="Reduction" value={[USER.halfFare && "Half Fare Travelcard", pass?.name].filter(Boolean).join(", ")} />}
+            {(passes.halfFare || pass) && <Line label="Reduction" value={[passes.halfFare && "Half Fare Travelcard", pass?.name].filter(Boolean).join(", ")} />}
             <div className="border-t border-line pt-2.5">
               <Line label={<b className="font-bold">Total</b>} value={<b className="font-bold">CHF {total.toFixed(2)}</b>} />
             </div>

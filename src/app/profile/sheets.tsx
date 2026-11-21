@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronRight, Trash2 } from "lucide-react";
-import { Card, InfoLine, OutlineButton, PrimaryButton, Radio, Sheet, Toggle, toast } from "@/components/ui";
+import { ChevronLeft, ChevronRight, Search, Trash2 } from "lucide-react";
+import { Card, Checkbox, InfoLine, OutlineButton, PrimaryButton, Radio, Sheet, Toggle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import { THEME_OPTIONS, setTheme, useThemeChoice } from "@/lib/theme";
+import { NATIONAL, travelcardNames, useCatalog, useTravelcards, type NationalId, type ZonePassMeta } from "@/lib/travelcards";
 
-export type ProfileSheet = "personal" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "appearance" | "help" | "legal" | "logout";
+export type ProfileSheet = "personal" | "travelcards" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "appearance" | "help" | "legal" | "logout";
 
 const INPUT = "h-[44px] w-full rounded-[15px] bg-surface-2 px-3.5 text-[16px] font-light tracking-tight outline-none placeholder:text-muted";
 
@@ -18,13 +19,18 @@ function Note({ children }: { children: ReactNode }) {
 /** A persisted on/off row. */
 function SettingToggle({ id, label, hint, fallback = false }: { id: string; label: string; hint?: string; fallback?: boolean }) {
   const [on, setOn] = useSetting<boolean>(id, fallback);
+  return <ToggleRow label={label} hint={hint} on={on} onChange={setOn} />;
+}
+
+/** An on/off row. */
+function ToggleRow({ label, hint, on, onChange }: { label: string; hint?: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center gap-3.5 border-b border-surface-3 px-4 py-[13px] last:border-b-0">
       <div className="min-w-0 flex-1">
         <p className="text-[16px] leading-tight font-light tracking-tight">{label}</p>
         {hint && <p className="mt-1.5 text-[11.5px] leading-tight font-light tracking-tight text-muted">{hint}</p>}
       </div>
-      <Toggle on={on} onChange={setOn} />
+      <Toggle on={on} onChange={onChange} />
     </div>
   );
 }
@@ -52,6 +58,8 @@ function Heading({ children }: { children: ReactNode }) {
 }
 
 function PersonalDetails() {
+  const [travelcards] = useTravelcards();
+  const cards = travelcardNames(travelcards, useCatalog());
   return (
     <>
       <Card className="space-y-2.5 p-4">
@@ -60,11 +68,138 @@ function PersonalDetails() {
         <InfoLine label="Date of birth" value={USER.birthDate} />
         <InfoLine label="E-mail" value={USER.email} />
         <InfoLine label="Customer number" value="DEMO-000-000-0" />
-        <InfoLine label="Travelcards" value={USER.travelcards.join(", ")} />
+        <InfoLine label="Travelcards" value={cards.join(", ") || "None"} />
       </Card>
       <Note>Your personal details are managed in your SwissPass account. This prototype uses a fictitious demo traveller.</Note>
       <div className="mt-4">
         <OutlineButton onClick={() => toast("Demo: this would open your SwissPass account in the browser.")}>Edit in SwissPass account</OutlineButton>
+      </div>
+    </>
+  );
+}
+
+/** National cards, zone travelcards (from NOVA tariff data) and regional passes. */
+function Travelcards() {
+  const [sel, setSel] = useTravelcards();
+  const cat = useCatalog();
+  const [adding, setAdding] = useState<ZonePassMeta | "network" | null>(null);
+
+  const setNational = (id: NationalId, on: boolean) => {
+    let national = on ? [...sel.national, id] : sel.national.filter((x) => x !== id);
+    // One GA at a time.
+    if (on && (id === "ga1" || id === "ga2")) national = national.filter((x) => x === id || (x !== "ga1" && x !== "ga2"));
+    setSel({ ...sel, national });
+  };
+  const setArea = (id: string, on: boolean) => setSel({ ...sel, areas: on ? [...sel.areas, id] : sel.areas.filter((x) => x !== id) });
+
+  if (adding === "network")
+    return (
+      <>
+        <BackRow label="Travelcards" onClick={() => setAdding(null)} />
+        <Heading>Choose the fare network</Heading>
+        <Card className="overflow-hidden">
+          {cat?.zonePasses.map((p) => <LinkRow key={p.id} label={p.network} hint={p.label} onClick={() => setAdding(p)} />)}
+        </Card>
+      </>
+    );
+  if (adding)
+    return (
+      <ZonePicker
+        meta={adding}
+        initial={sel.zones.find((z) => z.id === adding.id)?.zones ?? []}
+        onBack={() => setAdding("network")}
+        onSave={(zones) => {
+          setSel({ ...sel, zones: [...sel.zones.filter((z) => z.id !== adding.id), { id: adding.id, zones }] });
+          setAdding(null);
+        }}
+      />
+    );
+
+  return (
+    <>
+      <Heading>SBB travelcards</Heading>
+      <Card className="overflow-hidden">
+        {NATIONAL.map((n) => (
+          <ToggleRow key={n.id} label={n.name} on={sel.national.includes(n.id)} onChange={(on) => setNational(n.id, on)} />
+        ))}
+      </Card>
+
+      <Heading>Zone travelcards</Heading>
+      <Card className="overflow-hidden">
+        {sel.zones.map((z) => {
+          const meta = cat?.zonePasses.find((p) => p.id === z.id);
+          return (
+            <div key={z.id} className="flex items-center border-b border-surface-3 last:border-b-0">
+              <button onClick={() => meta && setAdding(meta)} className="min-w-0 flex-1 px-4 py-[12px] text-left">
+                <span className="block text-[16px] leading-tight font-light tracking-tight">{meta?.network ?? "Zone travelcard"}</span>
+                <span className="mt-1 block text-[11.5px] leading-tight font-light text-muted">
+                  {z.zones.length === 1 ? "Zone" : "Zones"} {z.zones.join(" + ")}
+                </span>
+              </button>
+              <button aria-label={`Remove ${meta?.network ?? "zone travelcard"}`} onClick={() => setSel({ ...sel, zones: sel.zones.filter((x) => x.id !== z.id) })} className="p-4 text-muted">
+                <Trash2 className="size-4.5" strokeWidth={1.5} />
+              </button>
+            </div>
+          );
+        })}
+        <LinkRow label="Add zone travelcard" hint="Mobilis, ZVV, Libero, unireso and 20 more networks" onClick={() => setAdding("network")} />
+      </Card>
+
+      <Heading>Regional passes</Heading>
+      <Card className="overflow-hidden">
+        {cat?.areaPasses.map((a) => <ToggleRow key={a.id} label={a.name} on={sel.areas.includes(a.id)} onChange={(on) => setArea(a.id, on)} />)}
+      </Card>
+      <Note>Prices and &ldquo;covered by your travelcard&rdquo; follow these travelcards. Zones and lines come from the NOVA tariff data on opentransportdata.swiss.</Note>
+    </>
+  );
+}
+
+function BackRow({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="-mt-1 mb-1 flex h-9 items-center gap-1 px-1 text-[14.5px] font-light text-muted">
+      <ChevronLeft className="size-4.25" strokeWidth={1.5} />
+      {label}
+    </button>
+  );
+}
+
+/** Pick the zones of one network's travelcard; searchable, as networks have up to 155 zones. */
+function ZonePicker({ meta, initial, onBack, onSave }: { meta: ZonePassMeta; initial: string[]; onBack: () => void; onSave: (zones: string[]) => void }) {
+  const [picked, setPicked] = useState(() => new Set(initial));
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const shown = meta.zones.filter((z) => !needle || z.id.startsWith(needle) || z.name.toLowerCase().includes(needle));
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const zones = meta.zones.map((z) => z.id).filter((id) => picked.has(id));
+  return (
+    <>
+      <BackRow label="Fare networks" onClick={onBack} />
+      <Heading>{meta.network}: your zones</Heading>
+      {meta.zones.length > 8 && (
+        <label className={`${INPUT} mb-2.5 flex items-center gap-2.5`}>
+          <Search className="size-4.25 shrink-0 text-muted" strokeWidth={1.5} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zone number or place" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted" />
+        </label>
+      )}
+      <Card className="overflow-hidden">
+        {shown.map((z) => (
+          <button key={z.id} onClick={() => toggle(z.id)} className="flex w-full items-center gap-3 border-b border-surface-3 px-4 py-[12px] text-left last:border-b-0">
+            <Checkbox checked={picked.has(z.id)} />
+            <span className="w-10 shrink-0 text-[16px] font-bold tabular-nums">{z.id}</span>
+            <span className="min-w-0 flex-1 truncate text-[16px] font-light tracking-tight">{z.name || `Zone ${z.id}`}</span>
+          </button>
+        ))}
+      </Card>
+      <div className="sticky bottom-0 mt-3.5 pb-1">
+        <PrimaryButton disabled={!zones.length} onClick={() => onSave(zones)}>
+          {zones.length ? `Save ${zones.length === 1 ? "zone" : "zones"} ${zones.join(" + ")}` : "Choose your zones"}
+        </PrimaryButton>
       </div>
     </>
   );
@@ -359,6 +494,7 @@ function Appearance() {
 const TITLES: Record<ProfileSheet, string> = {
   appearance: "Appearance",
   personal: "Personal details",
+  travelcards: "Travelcards",
   copassenger: "Co-passenger",
   plates: "Licence plates",
   wallet: "Wallet",
@@ -374,6 +510,7 @@ export function ProfileSheets({ sheet, onClose }: { sheet: ProfileSheet; onClose
   return (
     <Sheet title={TITLES[sheet]} onClose={onClose} full={sheet !== "logout" && sheet !== "appearance"}>
       {sheet === "personal" && <PersonalDetails />}
+      {sheet === "travelcards" && <Travelcards />}
       {sheet === "copassenger" && <CoPassengers />}
       {sheet === "plates" && <Plates />}
       {sheet === "wallet" && <Wallet />}

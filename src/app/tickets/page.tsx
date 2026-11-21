@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, DESK_COL, Header, InfoLine, OutlineButton, Overlap, PrimaryButton, Segmented, Sheet, cn, toast } from "@/components/ui";
 import { LongArrow, PhoneTicketIcon, QrOffIcon } from "@/components/icons";
 import { USER } from "@/lib/mock-data";
+import { travelcardNames, useCatalog, useTravelcards } from "@/lib/travelcards";
 import { actions, useAppState, type Ticket } from "@/lib/store";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
 import { journeyHref } from "@/lib/journey-query";
@@ -14,7 +15,7 @@ import { journeyHref } from "@/lib/journey-query";
 const TRAVELCARDS: Record<string, { validity: string; text: string }> = {
   "Half Fare Travelcard": { validity: "01.01.2026 – 31.12.2026", text: "Travel at half price on trains, buses, boats and most mountain railways throughout Switzerland. Renews automatically." },
   "Night GA Travelcard": { validity: "01.01.2026 – 31.12.2026", text: "Unlimited travel in 2nd class from 7 pm until the end of service (5 am, or 7 am on Saturdays and Sundays). For young people under 25." },
-  "Mobilis Travelcard, zones 11 + 12": { validity: "01.01.2026 – 31.12.2026", text: "Unlimited travel in 2nd class on trains, metros and buses within Mobilis zones 11 and 12 (Grand Lausanne: Lausanne, Renens, Ecublens, Prilly, Pully, Epalinges, Lutry and neighbouring municipalities)." },
+  "Mobilis travelcard, zones 11 + 12": { validity: "01.01.2026 – 31.12.2026", text: "Unlimited travel in 2nd class on trains, metros and buses within Mobilis zones 11 and 12 (Grand Lausanne: Lausanne, Renens, Ecublens, Prilly, Pully, Epalinges, Lutry and neighbouring municipalities)." },
 };
 
 /** Deterministic QR-looking pattern (NOT a real, scannable code). */
@@ -65,6 +66,8 @@ export default function TicketsPage() {
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Ticket | null>(null);
   const [card, setCard] = useState<string | null>(null);
+  const [selection] = useTravelcards();
+  const cards = travelcardNames(selection, useCatalog());
   const [zoom, setZoom] = useState(false);
   // Read the clock only on the client to keep render pure and hydration-safe.
   const now = useSyncExternalStore(subscribeNoop, () => Math.floor(Date.now() / 60000) * 60000, () => 0);
@@ -126,7 +129,7 @@ export default function TicketsPage() {
                   <InfoLine label="Card holder" value={`${USER.firstName} ${USER.lastName}`} />
                   <InfoLine label="Date of birth" value={USER.birthDate} />
                   <InfoLine label="Card valid until" value="31.12.2030" />
-                  <InfoLine label="Travelcards" value={String(USER.travelcards.length)} />
+                  <InfoLine label="Travelcards" value={String(cards.length)} />
                 </div>
               )}
               <div className="mt-[9.5px] flex justify-center" role="tablist" aria-label="SwissPass pages">
@@ -153,7 +156,7 @@ export default function TicketsPage() {
 
           <h2 className="px-[15px] pt-5 pb-1.75 text-[13.5px] font-light tracking-tight">Travelcards on your SwissPass</h2>
           <div className="space-y-[8.5px]">
-            {USER.travelcards.map((c) => (
+            {cards.map((c) => (
               <button key={c} onClick={() => setCard(c)} className="flex h-[45px] w-full items-center rounded-[19px] bg-surface pr-5 pl-[15.5px] text-left transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
                 <span className="flex-1 text-[15.5px] font-light tracking-tight">{c}</span>
                 <ChevronRight className="size-4.25" strokeWidth={1.5} />
@@ -188,7 +191,7 @@ export default function TicketsPage() {
       )}
       {card && (
         <Sheet title={card} onClose={() => setCard(null)}>
-          <p className="px-1 text-[14.5px] leading-snug font-light text-fg/85">{TRAVELCARDS[card]?.text}</p>
+          <p className="px-1 text-[14.5px] leading-snug font-light text-fg/85">{TRAVELCARDS[card]?.text ?? "Unlimited travel in 2nd class on the lines and in the zones this travelcard covers. Change your travelcards in Profile → Travelcards."}</p>
           <Card className="mt-4 space-y-2 p-4">
             <InfoLine label="Holder" value={`${USER.firstName} ${USER.lastName}`} />
             <InfoLine label="Validity" value={TRAVELCARDS[card]?.validity ?? "–"} />
