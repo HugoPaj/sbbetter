@@ -319,7 +319,7 @@ export function Sheet({
               <X className="size-5" strokeWidth={1.25} />
             </button>
           </div>
-          <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),27px)]">{children}</div>
+          <div className="no-scrollbar flex-1 overflow-x-hidden overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),27px)]">{children}</div>
         </div>
       </div>
     </Overlay>

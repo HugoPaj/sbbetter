@@ -100,7 +100,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: IOS_PWA_SCRIPT }} />
         {/* Phone-width column; from `lg` up it is the full-width area next to the side navigation.
             On phones it is the scroll container (exactly one screen tall) so the document itself never scrolls or bounces. */}
-        <div id="app-scroll" className="relative mx-auto h-(--app-h) w-full max-w-[430px] overflow-y-auto overscroll-none no-scrollbar lg:h-auto lg:min-h-dvh lg:overflow-visible bg-page shadow-2xl shadow-black light:shadow-black/25 lg:mx-0 lg:max-w-none lg:pl-[248px] lg:shadow-none">
+        <div id="app-scroll" className="relative mx-auto h-(--app-h) w-full max-w-[430px] overflow-x-hidden overflow-y-auto overscroll-none no-scrollbar lg:h-auto lg:min-h-dvh lg:overflow-visible bg-page shadow-2xl shadow-black light:shadow-black/25 lg:mx-0 lg:max-w-none lg:pl-[248px] lg:shadow-none">
           <SideNav />
           {children}
           <BottomNav />

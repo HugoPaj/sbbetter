@@ -92,7 +92,7 @@ export function LocationPicker({
             />
           </label>
         </div>
-        <ul className="no-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+        <ul className="no-scrollbar flex-1 overflow-x-hidden overflow-y-auto pb-[env(safe-area-inset-bottom)]">
           {allowCurrent && (
             <Row onClick={() => onPick({ id: CURRENT_LOCATION, name: "Current location" })}>
               <TargetIcon className="size-5 shrink-0 text-[#2f8cff]" />
