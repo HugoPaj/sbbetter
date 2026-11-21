@@ -51,6 +51,12 @@ export function DepartureBoard({ stationId, stationName, onClose }: { stationId:
       </div>
       {error && <ErrorBox message={error} />}
       {!entries && !error && <ListRowsSkeleton count={8} label={`Loading ${type}s`} className="divide-y divide-surface-3 rounded-[19px] bg-surface" />}
+      {/* Quiet stops (e.g. campus lines at the weekend) return nothing for the next hours. */}
+      {entries?.length === 0 && (
+        <p className="rounded-[19px] bg-surface px-[15px] py-[14px] text-[14.5px] font-light text-muted">
+          No {type}s in the next few hours.
+        </p>
+      )}
       <ul className="divide-y divide-surface-3 rounded-[19px] bg-surface">
         {entries?.map((e, i) => {
           const delay = e.stop.delay ?? 0;
