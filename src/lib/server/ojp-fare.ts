@@ -250,6 +250,8 @@ type Product = { id: string; name: string; cls: "first" | "second"; price: numbe
 function englishName(name: string): string {
   return name
     .replace(/Sparbillett/i, "Supersaver Ticket")
+    // NOVA answers with a Saver Day Pass (80040) when it is the cheapest way to make the trip.
+    .replace(/Spartageskarte/i, "Saver Day Pass")
     .replace(/Kinder-Tageskarte/i, "Children's Day Pass")
     .replace(/Tageskarte/i, "Day Pass")
     .replace(/Einzelbillett/i, "Single Ticket")
