@@ -63,7 +63,19 @@ body {
 
 body {
   font-family: var(--font-sans);
+  overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Phones: the document is locked to one screen; the app column (#app-scroll) scrolls instead,
+   so iOS Safari never rubber-bands or scrolls the whole page. */
+@media (width < 64rem) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* Hide scrollbars inside the phone frame but keep scrolling. */

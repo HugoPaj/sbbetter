@@ -358,6 +358,11 @@ export function Spinner() {
   return <div className="mx-auto my-8.5 size-6.75 animate-spin rounded-full border-2 border-fg/20 border-t-fg" />;
 }
 
+/** A placeholder block for content that is still loading. Size and shape it with `className`. */
+export function Skeleton({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("block animate-pulse rounded-[5px] bg-fg/10 motion-reduce:animate-none", className)} />;
+}
+
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <Card className="mx-[8.5px] my-3.5 p-4.25 text-center lg:mx-auto lg:max-w-[480px]">

@@ -7,6 +7,7 @@ import { formatMinutes, formatTime, parseApiDuration } from "@/lib/format";
 import { passTag, type Fare } from "@/lib/pricing";
 import { ModeGlyph, PersonGlyph, WalkIcon, type Mode } from "./icons";
 import { cn } from "./ui";
+import { PriceTagSkeleton } from "./skeletons";
 
 const TRAIN_CATS = new Set(["IC", "ICE", "ICN", "IR", "IRE", "RE", "R", "S", "SN", "EC", "EN", "TGV", "RJ", "RJX", "PE", "EXT", "ARZ", "NJ", "D"]);
 
@@ -132,6 +133,7 @@ export function ConnectionCard({
   walkMinutes?: number;
 }) {
   const price = fare?.secondClass;
+  const pricing = fare === null;
   const pass = fare?.pass;
   const j = firstJourney(connection);
   const walk = connection.accessWalk?.minutes ?? walkMinutes;
@@ -147,7 +149,8 @@ export function ConnectionCard({
           {pass && <span className="font-light text-ok">{passTag(pass)}</span>}
         </span>
       )}
-      <div className={cn("flex h-5 items-center gap-[5px]", price !== undefined && (pass ? "pr-[168px]" : "pr-[112px]"))}>
+      {pricing && <PriceTagSkeleton />}
+      <div className={cn("flex h-5 items-center gap-[5px]", price !== undefined ? (pass ? "pr-[168px]" : "pr-[112px]") : pricing && "pr-[112px]")}>
         {j ? (
           <>
             <ModeBadge category={j.category} />

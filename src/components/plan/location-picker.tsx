@@ -8,6 +8,7 @@ import { FAVOURITES } from "@/lib/mock-data";
 import { StopIcon, TargetIcon } from "../icons";
 import { Overlay, useEscape } from "../ui";
 import { ModeBadge } from "../journey";
+import { ListRowsSkeleton } from "../skeletons";
 
 const ICON_CATEGORY: Record<string, string> = { bus: "B", train: "IR", tram: "T", ship: "BAT", cableway: "GB" };
 
@@ -93,7 +94,11 @@ export function LocationPicker({
                 <span>{f.id}</span>
               </Row>
             ))}
-          {loading && shown.length === 0 && <li className="px-4.25 py-3.5 text-muted">Searching…</li>}
+          {loading && shown.length === 0 && (
+            <li>
+              <ListRowsSkeleton count={4} badge={false} label="Searching stations" className="divide-y divide-line border-b border-line" />
+            </li>
+          )}
           {shown.map((s) => (
             <Row key={`${s.id}-${s.name}`} onClick={() => onPick({ id: s.id ?? s.name!, name: s.name! })}>
               {s.icon && ICON_CATEGORY[s.icon] ? (

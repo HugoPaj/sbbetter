@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowRightLeft, Bike, Info, Pencil, Ticket, User } from "lucide-react";
-import { Card, Checkbox, DESK_COL, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, Radio, Sheet, Spinner, Stepper, cn, toast } from "@/components/ui";
+import { Card, Checkbox, DESK_COL, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, Radio, Sheet, Skeleton, Stepper, cn, toast } from "@/components/ui";
+import { OffersSkeleton } from "@/components/skeletons";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
 import { loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
@@ -181,7 +182,17 @@ export function OffersView() {
         </div>
       </Overlap>
 
-      {conn === undefined && <Spinner />}
+      {/* The connection, then its price: both are looked up before there is anything to offer. */}
+      {(conn === undefined || (conn && !fare)) && (
+        <>
+          <div className={DESK_COL}>
+            <OffersSkeleton />
+          </div>
+          <div className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 items-center gap-[8.5px] rounded-t-[22px] bg-[#1c1c1c] pt-[16.5px] pr-[18px] pb-[calc(var(--home-inset)+93px)] pl-4 shadow-[0_-8px_24px_rgba(0,0,0,0.5)] lg:bottom-5 lg:left-[calc(50%+124px)] lg:max-w-[672px] lg:rounded-[22px] lg:border lg:border-fg/10 light:bg-white">
+            <Skeleton className="h-[44px] w-full rounded-full" />
+          </div>
+        </>
+      )}
       {conn === null && <ErrorBox message="Could not load offers." />}
 
       {fare && (

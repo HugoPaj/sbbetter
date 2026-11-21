@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { getStationboard, type StationboardEntry } from "@/lib/transport";
 import { formatTime, zurichDateTime } from "@/lib/format";
 import { journeyHref } from "@/lib/journey-query";
-import { ErrorBox, PillToggle, Sheet, Spinner } from "../ui";
+import { ErrorBox, PillToggle, Sheet } from "../ui";
+import { ListRowsSkeleton } from "../skeletons";
 import { LineLabel, ModeBadge } from "../journey";
 
 /** Live departures for one stop, as a bottom sheet. */
 export function DepartureBoard({ stationId, stationName, onClose }: { stationId: string; stationName: string; onClose: () => void }) {
   const router = useRouter();
   const [type, setType] = useState<"departure" | "arrival">("departure");
-  // Tagged with the request it answers, so switching the type shows a spinner.
+  // Tagged with the request it answers, so switching the type shows placeholders.
   const [result, setResult] = useState<{ key: string; entries: StationboardEntry[] | null; error: string | null }>({ key: "", entries: null, error: null });
   const key = `${stationId}|${type}`;
 
@@ -49,7 +50,7 @@ export function DepartureBoard({ stationId, stationName, onClose }: { stationId:
         />
       </div>
       {error && <ErrorBox message={error} />}
-      {!entries && !error && <Spinner />}
+      {!entries && !error && <ListRowsSkeleton count={8} label={`Loading ${type}s`} className="divide-y divide-surface-3 rounded-[19px] bg-surface" />}
       <ul className="divide-y divide-surface-3 rounded-[19px] bg-surface">
         {entries?.map((e, i) => {
           const delay = e.stop.delay ?? 0;

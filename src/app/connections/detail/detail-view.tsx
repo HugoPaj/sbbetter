@@ -4,7 +4,8 @@ import { Fragment, useCallback, useEffect, useState, useSyncExternalStore, type 
 import { useRouter, useSearchParams } from "next/navigation";
 import { flushSync } from "react-dom";
 import { ArrowRightLeft, CalendarPlus, ChevronDown, ChevronRight, EllipsisVertical, FlaskConical, Share2, Star, Ticket, TriangleAlert } from "lucide-react";
-import { Card, ErrorBox, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Radio, RoundButton, Sheet, Spinner, cn, toast, useIsDesktop } from "@/components/ui";
+import { Card, ErrorBox, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Radio, RoundButton, Sheet, Skeleton, cn, toast, useIsDesktop } from "@/components/ui";
+import { ItinerarySkeleton, OtherConnectionSkeleton } from "@/components/skeletons";
 import { DepartureBoard } from "@/components/plan/departure-board";
 import { RouteMap } from "@/components/plan/route-map";
 import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
@@ -320,6 +321,7 @@ export function DetailView() {
   const toggleView = () => {
     if (!conn) return toast("The connection is still loading.");
     window.scrollTo(0, 0);
+    document.getElementById("app-scroll")?.scrollTo(0, 0);
     setView((v) => (v === "map" ? "list" : "map"));
   };
   const ring = mapMode ? "" : "ring-[5px] ring-page";
@@ -361,7 +363,7 @@ export function DetailView() {
       </Overlap>
       </div>
 
-      {conn === undefined && <Spinner />}
+      {conn === undefined && <ItinerarySkeleton />}
       {conn === null && <ErrorBox message="Could not load this connection." />}
 
       {conn && !mapMode && (
@@ -393,9 +395,13 @@ export function DetailView() {
         </aside>
       )}
 
-      {conn && !mapMode && price !== null && !verdict?.alternative && (
+      {conn && !mapMode && !verdict?.alternative && (
         <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px] lg:left-[248px] lg:w-[520px] lg:max-w-none lg:translate-x-0 lg:px-[24.5px]">
-          {covered ? (
+          {price === null ? (
+            <div role="status" aria-label="Loading price" className="flex h-[44px] w-full items-center justify-center rounded-full bg-surface-2 shadow-lg shadow-black/40">
+              <Skeleton className="h-[14px] w-[150px] bg-fg/15" />
+            </div>
+          ) : covered ? (
             <OutlineButton href={offersHref} className="shadow-lg shadow-black/40">
               Class upgrade or co-travellers
             </OutlineButton>
@@ -430,7 +436,11 @@ export function DetailView() {
       {others !== null && (
         <Sheet title="Other connections" onClose={() => setOthers(null)}>
           {others === "loading" ? (
-            <Spinner />
+            <div role="status" aria-label="Loading other connections" className="space-y-2 pb-4">
+              {[0, 1, 2, 3].map((i) => (
+                <OtherConnectionSkeleton key={i} />
+              ))}
+            </div>
           ) : others.length === 0 ? (
             <p className="pb-4 text-[14.5px] font-light text-muted">No other connections found.</p>
           ) : (
