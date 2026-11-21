@@ -333,7 +333,8 @@ function CommuteCard({ commute: c, at }: { commute: Commute; at: "home" | "work"
   return (
     <Card className="overflow-hidden">
       {shown.map((l, i) => (
-        <Row key={l.label} onClick={() => router.push(journeyHref("/connections", commuteQuery(c, l.back)))}>
+        // From now, like the countdown beside it, not from the usual commute time.
+        <Row key={l.label} onClick={() => router.push(journeyHref("/connections", { ...commuteQuery(c, l.back), ...zurichDateTime() }))}>
           <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", i === 0 ? "bg-sbb-red text-white" : "border border-fg/40")}>
             <l.icon className="size-4.5" strokeWidth={1.5} />
           </span>
