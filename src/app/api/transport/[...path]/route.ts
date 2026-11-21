@@ -83,6 +83,7 @@ async function fromOjp(endpoint: string, sp: URLSearchParams, signal: AbortSigna
           time: sp.get("time") ?? undefined,
           isArrivalTime: sp.get("isArrivalTime") === "1",
           limit: Number(sp.get("limit") ?? 6),
+          track: sp.get("track") === "1",
         },
         signal,
       );
@@ -112,6 +113,7 @@ async function fromOpendata(endpoint: string, sp: URLSearchParams, signal: Abort
   if (endpoint !== "connections") return opendata(endpoint, sp, signal);
 
   const params = new URLSearchParams(sp);
+  params.delete("track"); // no geometry upstream: the map falls back to straight lines between stops
   let walk: Connection["accessWalk"];
   for (const key of ["from", "to"] as const) {
     const c = parseCoord(params.get(key) ?? "");

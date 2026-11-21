@@ -34,6 +34,9 @@ const ARRAY_TAGS = new Set([
   "PreviousCall",
   "OnwardCall",
   "Place",
+  "TrackSection",
+  "PathGuidanceSection",
+  "Position",
 ]);
 
 const parser = new XMLParser({
@@ -366,6 +369,8 @@ export type OjpTripQuery = {
   time?: string;
   isArrivalTime?: boolean;
   limit?: number;
+  /** Ask for leg projections (the path of every leg). */
+  track?: boolean;
 };
 
 export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Promise<Connection[]> {
@@ -380,7 +385,7 @@ export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Pro
         <NumberOfResults>${q.limit ?? 6}</NumberOfResults>
         <IncludeIntermediateStops>true</IncludeIntermediateStops>
         <IncludeAllRestrictedLines>true</IncludeAllRestrictedLines>
-        <UseRealtimeData>explanatory</UseRealtimeData>
+        <UseRealtimeData>explanatory</UseRealtimeData>${q.track ? "\n        <IncludeLegProjection>true</IncludeLegProjection>" : ""}
       </Params>
     </OJPTripRequest>`,
     signal,
@@ -424,7 +429,7 @@ function tripToConnection(
       const pass = [tl.LegBoard, ...(tl.LegIntermediate ?? []), tl.LegAlight].map((c) => checkpoint(c, coords));
       const occ = occupancy(tl.LegBoard);
       const journey: Journey = { ...journeyMeta(tl.Service), passList: pass, capacity1st: occ.first, capacity2nd: occ.second };
-      sections.push({ journey, walk: null, departure: pass[0], arrival: pass[pass.length - 1] });
+      sections.push({ journey, walk: null, departure: pass[0], arrival: pass[pass.length - 1], track: legTrack(tl) });
       for (const ref of tl.Service?.SituationFullRefs?.SituationFullRef ?? []) {
         const s = situations.get(String(ref.SituationNumber));
         if (s) disruptions.set(String(ref.SituationNumber), s);
@@ -440,7 +445,7 @@ function tripToConnection(
     if (i === 0 && origin) {
       // Walk from the user's position to the first stop: exposed separately so the
       // connection starts at the boarding stop (same model as the native app).
-      accessWalk = { minutes, metres };
+      accessWalk = { minutes, metres, track: legTrack(walkLeg) };
       return;
     }
     const start = walkLeg.LegStart;
@@ -468,7 +473,7 @@ function tripToConnection(
     // A platform change inside one station isn't a walk the native app lists.
     const sameStop = (dep.station.id && dep.station.id === arr.station.id) || dep.station.name === arr.station.name;
     if (!sameStop) {
-      sections.push({ journey: null, walk: { duration: minutes * 60 }, departure: dep, arrival: arr });
+      sections.push({ journey: null, walk: { duration: minutes * 60 }, departure: dep, arrival: arr, track: legTrack(walkLeg) });
       cursor = arrIso;
     }
   });
@@ -490,6 +495,58 @@ function tripToConnection(
     accessWalk,
     disruptions: [...disruptions.values()],
   };
+}
+
+/**
+ * A leg's path, as [lon, lat] (present with IncludeLegProjection): rides carry
+ * it in `LegTrack`, transfer walks only in `PathGuidance`. Rail legs come with thousands of
+ * points; simplified to ~2 m.
+ */
+function legTrack(leg: X): [number, number][] | undefined {
+  const pts: [number, number][] = [];
+  // Some walks carry both (the same path twice): prefer LegTrack.
+  const sections: X[] = leg?.LegTrack?.TrackSection ?? ((leg?.PathGuidance?.PathGuidanceSection ?? []) as X[]).flatMap((g) => g?.TrackSection ?? []);
+  for (const section of sections) {
+    for (const p of section?.LinkProjection?.Position ?? []) {
+      const lon = num(p?.Longitude);
+      const lat = num(p?.Latitude);
+      if (lon === null || lat === null || Number.isNaN(lon) || Number.isNaN(lat)) continue;
+      const last = pts[pts.length - 1];
+      if (!last || last[0] !== lon || last[1] !== lat) pts.push([lon, lat]);
+    }
+  }
+  return pts.length > 1 ? simplify(pts, 0.00002) : undefined;
+}
+
+/** Douglas–Peucker line simplification (tolerance in degrees; fine at Swiss scale). */
+function simplify(pts: [number, number][], tolerance: number): [number, number][] {
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack: [number, number][] = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay] = pts[a];
+    const [bx, by] = pts[b];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let max = 0;
+    let index = -1;
+    for (let i = a + 1; i < b; i++) {
+      const [px, py] = pts[i];
+      const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+      const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+      if (d > max) {
+        max = d;
+        index = i;
+      }
+    }
+    if (index >= 0 && max > tolerance) {
+      keep[index] = 1;
+      stack.push([a, index], [index, b]);
+    }
+  }
+  return pts.filter((_, i) => keep[i]).map(([x, y]) => [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]);
 }
 
 // ---------------------------------------------------------------------------

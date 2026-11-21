@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRightLeft, CalendarPlus, ChevronDown, ChevronRight, EllipsisVertical, FlaskConical, Share2, Star, Ticket, TriangleAlert } from "lucide-react";
 import { Card, ErrorBox, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Radio, RoundButton, Sheet, Spinner, cn, toast } from "@/components/ui";
 import { DepartureBoard } from "@/components/plan/departure-board";
-import { RouteMap, type RouteLine, type RoutePoint } from "@/components/plan/route-map";
-import { LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
+import { RouteMap } from "@/components/plan/route-map";
+import { ItineraryIcon, LongArrow, MapPinIcon, WalkIcon } from "@/components/icons";
+import { TripMap, lonLat, type LonLat, type Walk } from "./trip-map";
 import { Capacity, LineLabel, ModeBadge, Timeline, WalkBadge } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref } from "@/lib/journey-query";
 import { VerdictCard } from "@/components/verdict-card";
@@ -19,44 +20,12 @@ import { USER } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import type { Checkpoint, Connection, Disruption, Section } from "@/lib/transport";
 
-type LonLat = [number, number];
 type Stop = { id: string; name: string };
-type Walk = { minutes: number; metres: number; from: string; to: string; a: LonLat | null; b: LonLat | null };
-
-const lonLat = (c: Checkpoint): LonLat | null => (c.station.coordinate.x && c.station.coordinate.y ? [c.station.coordinate.y, c.station.coordinate.x] : null);
 
 /** "coord:lat,lon" → [lon, lat] */
 function coordOf(id: string): LonLat | null {
   const m = /^coord:(-?[\d.]+),(-?[\d.]+)$/.exec(id);
   return m ? [Number(m[2]), Number(m[1])] : null;
-}
-
-/** Lines and stops of a connection for the route map. */
-function routeOf(conn: Connection, origin: LonLat | null, originName: string): { lines: RouteLine[]; points: RoutePoint[] } {
-  const lines: RouteLine[] = [];
-  const points: RoutePoint[] = [];
-  const first = conn.sections.find((s) => s.journey);
-  const firstPos = first && lonLat(first.departure);
-  if (origin && firstPos) {
-    lines.push({ coords: [origin, firstPos], walk: true });
-    points.push({ lon: origin[0], lat: origin[1], name: originName, major: true });
-  }
-  for (const s of conn.sections) {
-    const a = lonLat(s.departure);
-    const b = lonLat(s.arrival);
-    if (!s.journey) {
-      if (a && b) lines.push({ coords: [a, b], walk: true });
-      continue;
-    }
-    const pass = s.journey.passList.length > 1 ? s.journey.passList : [s.departure, s.arrival];
-    const coords = pass.map(lonLat).filter((c): c is LonLat => c !== null);
-    lines.push({ coords });
-    pass.forEach((p, i) => {
-      const c = lonLat(p);
-      if (c) points.push({ lon: c[0], lat: c[1], name: p.station.name ?? "", major: i === 0 || i === pass.length - 1 });
-    });
-  }
-  return { lines, points };
 }
 
 function icsOf(conn: Connection, title: string, description: string): string {
@@ -89,7 +58,16 @@ export function DetailView() {
   const router = useRouter();
   const [conn, setConn] = useState<Connection | null | undefined>(undefined);
   const { trips } = useAppState();
-  const [sheet, setSheet] = useState<"map" | "more" | "sim" | null>(null);
+  const [sheet, setSheet] = useState<"more" | "sim" | null>(null);
+  const [view, setView] = useState<"list" | "map">("list");
+  const [topInset, setTopInset] = useState(0);
+  /** Bottom edge of the summary card + buttons, measured from the top of the map. */
+  const summaryRef = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTopInset(el.offsetHeight + el.offsetTop));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [board, setBoard] = useState<Stop | null>(null);
   const [walkSheet, setWalkSheet] = useState<Walk | null>(null);
 
@@ -97,7 +75,7 @@ export function DetailView() {
     const q = journeyFromSearchParams(new URLSearchParams(raw));
     if (!q) return;
     const ctrl = new AbortController();
-    fetchConnection(q, key, ctrl.signal)
+    fetchConnection(q, key, ctrl.signal, { track: true })
       .then(setConn)
       .catch((e: Error) => e.name !== "AbortError" && setConn(null));
     return () => ctrl.abort();
@@ -204,10 +182,21 @@ export function DetailView() {
     router.push(journeyHref("/connections", { ...query, from: query.to, fromName: query.toName, to: from.id, toName: from.name, ...when, isArrivalTime: false, walkMinutes: undefined }));
   }
 
+  const mapMode = view === "map" && !!conn;
+  const toggleView = () => {
+    if (!conn) return toast("The connection is still loading.");
+    window.scrollTo(0, 0);
+    setView((v) => (v === "map" ? "list" : "map"));
+  };
+  const ring = mapMode ? "" : "ring-[5px] ring-black";
+
   return (
-    <div>
+    <div className={mapMode ? "flex h-dvh flex-col overflow-hidden" : undefined}>
       <Header title="Connection" back extend />
+      <div className={mapMode ? "relative min-h-0 flex-1" : undefined}>
+      {mapMode && <TripMap connection={conn} origin={origin} fromLabel={fromLabel} accessWalk={walk} topInset={Math.max(0, topInset - 24)} onWalk={setWalkSheet} />}
       <Overlap>
+        <div ref={summaryRef}>
         <Card className="px-[15px] pt-3.5 pb-3">
           <p className="text-[16px] leading-snug font-bold">
             <span className="inline-block">
@@ -233,26 +222,28 @@ export function DetailView() {
         </Card>
         <div className="-mt-[13px] flex gap-[8.5px] px-[15px]">
           <RoundButton
-            className="ring-[5px] ring-black"
+            className={ring}
             label={saved ? "Remove from trips" : "Save trip"}
             onClick={toggleSaved}
           >
             <Star className={cn("size-6", saved && "fill-white")} strokeWidth={1.1} />
           </RoundButton>
-          <RoundButton label="Map" className="ring-[5px] ring-black" onClick={() => (conn ? setSheet("map") : toast("The connection is still loading."))}>
-            <MapPinIcon className="size-6" strokeWidth={1.1} />
+          <RoundButton label={mapMode ? "Show as list" : "Show on map"} className={ring} onClick={toggleView}>
+            {mapMode ? <ItineraryIcon className="size-6" strokeWidth={1.1} /> : <MapPinIcon className="size-6" strokeWidth={1.1} />}
           </RoundButton>
           <div className="flex-1" />
-          <RoundButton label="More" className="ring-[5px] ring-black" onClick={() => setSheet("more")}>
+          <RoundButton label="More" className={ring} onClick={() => setSheet("more")}>
             <EllipsisVertical className="size-6" strokeWidth={2} />
           </RoundButton>
         </div>
+        </div>
       </Overlap>
+      </div>
 
       {conn === undefined && <Spinner />}
       {conn === null && <ErrorBox message="Could not load this connection." />}
 
-      {conn && (
+      {conn && !mapMode && (
         <div className="mt-4 space-y-4.25 px-[8.5px]">
           {checking && <Card className="px-[15px] py-3.5 text-[14.5px] font-light text-muted">Checking your journey…</Card>}
           {verdict && (
@@ -271,7 +262,7 @@ export function DetailView() {
                 minutes={walk}
                 metres={conn.accessWalk?.metres}
                 onOpen={(metres) =>
-                  setWalkSheet({ minutes: walk, metres, from: fromLabel, to: journeySections[0]?.departure.station.name ?? "", a: origin, b: journeySections[0] ? lonLat(journeySections[0].departure) : null })
+                  setWalkSheet({ minutes: walk, metres, from: fromLabel, to: journeySections[0]?.departure.station.name ?? "", a: origin, b: journeySections[0] ? lonLat(journeySections[0].departure) : null, track: conn.accessWalk?.track })
                 }
               />
             </>
@@ -291,6 +282,7 @@ export function DetailView() {
                     to: s.arrival.station.name ?? "",
                     a: lonLat(s.departure),
                     b: lonLat(s.arrival),
+                    track: s.track,
                   })
                 }
               />
@@ -298,9 +290,9 @@ export function DetailView() {
           )}
         </div>
       )}
-      <div className="h-[calc(177px+var(--home-inset))]" />
+      {!mapMode && <div className="h-[calc(177px+var(--home-inset))]" />}
 
-      {conn && price !== null && !verdict?.alternative && (
+      {conn && !mapMode && price !== null && !verdict?.alternative && (
         <div className="fixed bottom-[calc(var(--home-inset)+94px)] left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-[8.5px]">
           <PrimaryButton href={journeyHref("/offers", query, { key: key ?? "" })}>
             Tickets from&nbsp;<b className="font-bold">CHF {price.toFixed(2)}</b>
@@ -308,12 +300,6 @@ export function DetailView() {
         </div>
       )}
 
-      {sheet === "map" && conn && (
-        <Sheet title={title} onClose={() => setSheet(null)} full>
-          <RouteMap {...routeOf(conn, origin, fromLabel)} className="h-[calc(100dvh-190px)]" />
-          <p className="mt-2 px-1 text-[12px] font-light text-muted">Red: public transport · blue dashed: on foot. Lines connect the stops and are not the exact track.</p>
-        </Sheet>
-      )}
       {sheet === "more" && (
         <Sheet title="More" onClose={() => setSheet(null)}>
           <Card className="overflow-hidden">
@@ -357,7 +343,7 @@ export function DetailView() {
         <Sheet title="Walk" onClose={() => setWalkSheet(null)}>
           {walkSheet.a && walkSheet.b && (
             <RouteMap
-              lines={[{ coords: [walkSheet.a, walkSheet.b], walk: true }]}
+              lines={[{ coords: walkSheet.track ?? [walkSheet.a, walkSheet.b], walk: true }]}
               points={[
                 { lon: walkSheet.a[0], lat: walkSheet.a[1], name: walkSheet.from, major: true },
                 { lon: walkSheet.b[0], lat: walkSheet.b[1], name: walkSheet.to, major: true },

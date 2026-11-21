@@ -55,6 +55,8 @@ export type Section = {
   walk: { duration: number | null } | null;
   departure: Checkpoint;
   arrival: Checkpoint;
+  /** Path actually travelled, as [lon, lat] (OJP leg projection; only when requested with `track`). */
+  track?: [number, number][];
 };
 
 export type Connection = {
@@ -67,7 +69,7 @@ export type Connection = {
   capacity2nd: number | null;
   sections: Section[];
   /** Walk from a coordinate origin ("coord:lat,lon") to the first stop. */
-  accessWalk?: { minutes: number; metres: number | null };
+  accessWalk?: { minutes: number; metres: number | null; track?: [number, number][] };
   /** Service alerts that touch this connection (OJP only). */
   disruptions?: Disruption[];
   /** Server-side handle to price this exact trip via /api/transport/fares (OJP only). */
@@ -160,6 +162,8 @@ export type ConnectionsRequest = {
   transportations?: TransportFilter[];
   limit?: number;
   page?: number;
+  /** Include each section's path geometry (OJP only; larger and slower, so only for the detail page). */
+  track?: boolean;
 };
 
 export async function getConnections(req: ConnectionsRequest, signal?: AbortSignal) {
@@ -175,6 +179,7 @@ export async function getConnections(req: ConnectionsRequest, signal?: AbortSign
       transportations: req.transportations,
       limit: req.limit ?? 6,
       page: req.page,
+      track: req.track ? 1 : undefined,
     },
     signal,
   );

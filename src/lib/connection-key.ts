@@ -16,7 +16,7 @@ export function queryForConnection(q: JourneyQuery, c: Connection): JourneyQuery
   return { ...q, date, time, isArrivalTime: false };
 }
 
-export async function fetchConnection(q: JourneyQuery, key: string | null, signal?: AbortSignal): Promise<Connection | null> {
-  const list = await getConnections({ ...toConnectionsRequest(q), limit: 4 }, signal);
+export async function fetchConnection(q: JourneyQuery, key: string | null, signal?: AbortSignal, opts: { track?: boolean } = {}): Promise<Connection | null> {
+  const list = await getConnections({ ...toConnectionsRequest(q), limit: 4, track: opts.track }, signal);
   return list.find((c) => connectionKey(c) === key) ?? list[0] ?? null;
 }

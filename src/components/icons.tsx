@@ -184,6 +184,18 @@ export function MapPinIcon(props: IconProps) {
   );
 }
 
+/** Itinerary list: stops on a line with text rows ("show as list"). */
+export function ItineraryIcon(props: IconProps) {
+  return (
+    <Line {...props}>
+      <path d="M5 6.5v11" />
+      <circle cx="5" cy="4.5" r="2" fill="currentColor" />
+      <circle cx="5" cy="19.5" r="2" fill="currentColor" />
+      <path d="M10 4.5h11M10 8.5h11M12.5 12h8.5M12.5 15.5h8.5M10 19.5h11" />
+    </Line>
+  );
+}
+
 /** Departure board: panel with rows and a small clock. */
 export function BoardIcon(props: IconProps) {
   return (

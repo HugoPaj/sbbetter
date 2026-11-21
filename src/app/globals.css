@@ -53,6 +53,10 @@ body {
   bottom: calc(var(--home-inset) + 94px);
   right: 14px;
 }
+/* Opened, the credit is wider than the gap beside the "Departure board" pill: show it one row up. */
+.maplibregl-map .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
+  bottom: calc(var(--home-inset) + 94px + 39px);
+}
 .maplibregl-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
   margin: 0;
   min-height: 31px;
@@ -64,7 +68,11 @@ body {
   line-height: 18px;
 }
 .maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact {
-  padding: 6px 34px 6px 10px;
+  box-sizing: border-box; /* MapLibre sizes this content-box, which made it taller than the pill */
+  display: flex;
+  align-items: center;
+  height: 31px;
+  padding: 0 34px 0 10px;
 }
 .maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
   min-width: 31px;
@@ -107,5 +115,11 @@ body {
 /* Maps inside sheets (route / walk): attribution sits in the map's own corner. */
 .route-map .maplibregl-map .maplibregl-ctrl-bottom-right {
   bottom: 8px;
+  right: 8px;
+}
+
+/* Full-screen connection map: attribution sits just above the bottom sheet. */
+.connection-map .maplibregl-map .maplibregl-ctrl-bottom-right {
+  bottom: calc(var(--map-bottom, 0px) + 8px);
   right: 8px;
 }

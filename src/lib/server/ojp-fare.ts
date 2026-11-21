@@ -44,6 +44,7 @@ let warned = false;
 export function rememberTrip(xml: string, parents: Map<string, string>): string {
   const clean = xml
     .replace(/<siri:StopPointRef>([^<]+)<\/siri:StopPointRef>/g, (_, ref: string) => `<siri:StopPointRef>${parents.get(ref) ?? ref}</siri:StopPointRef>`)
+    .replace(/<LegTrack>[\s\S]*?<\/LegTrack>/g, "")
     .replace(/<EstimatedTime>[^<]*<\/EstimatedTime>/g, "")
     .replace(/<EstimatedQuay>[\s\S]*?<\/EstimatedQuay>/g, "")
     .replace(/<SituationFullRefs>[\s\S]*?<\/SituationFullRefs>/g, "")
