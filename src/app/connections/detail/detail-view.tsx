@@ -330,7 +330,7 @@ export function DetailView() {
   const ring = mapMode ? "" : "ring-[5px] ring-page";
 
   return (
-    <div className={mapMode ? "flex h-dvh flex-col overflow-hidden" : undefined}>
+    <div className={mapMode ? "flex h-(--app-h) flex-col overflow-hidden" : undefined}>
       <Header title="Connection" back extend />
       {/* Desktop: the itinerary is a column on the left; the map fills the rest (see <aside> below). */}
       <div className="contents lg:block lg:w-[520px] lg:px-4">

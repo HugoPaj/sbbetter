@@ -37,6 +37,16 @@
    * reserves ~34pt; in a browser tab env() is 0, so keep at least that.
    */
   --home-inset: max(env(safe-area-inset-bottom), 34px);
+  /*
+   * iOS 26+ home-screen web app workarounds, set by IOS_PWA_SCRIPT in layout.tsx:
+   * --chin is how far 100dvh stops short of the physical bottom (WebKit leaves a black
+   * bar there); --safe-top replaces env(safe-area-inset-top), which WebKit reports as 0
+   * while the frosted status bar still covers the page (bug 301994).
+   */
+  --chin: 0px;
+  --safe-top: env(safe-area-inset-top);
+  /* Full screen height on phones; use instead of 100dvh. */
+  --app-h: calc(100dvh + var(--chin));
 }
 
 /* Light mode: `data-theme` is set on <html> before first paint (see layout.tsx and lib/theme.ts). */
@@ -75,6 +85,17 @@ body {
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+  }
+
+  /* Installed on iOS with a short viewport: stretch the document over the black bar, and make
+     <body> the frame for every `position: fixed` element (tab bar, bottom panels, sheets, toasts)
+     so `bottom: 0` lands on the physical screen edge instead of the short viewport's. */
+  :root[data-chin],
+  :root[data-chin] body {
+    height: var(--app-h);
+  }
+  :root[data-chin] body {
+    transform: translate(0);
   }
 }
 

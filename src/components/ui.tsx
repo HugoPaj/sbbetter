@@ -78,7 +78,7 @@ export function Header({
     <>
       <header
         className={cn(
-          "sticky top-0 z-30 bg-sbb-red px-2 text-white pt-[max(env(safe-area-inset-top),6px)] lg:flex lg:h-16 lg:items-center lg:gap-8 lg:px-8 lg:pt-0 lg:pb-0",
+          "sticky top-0 z-30 bg-sbb-red px-2 text-white pt-[max(var(--safe-top),6px)] lg:flex lg:h-16 lg:items-center lg:gap-8 lg:px-8 lg:pt-0 lg:pb-0",
           children ? "pb-4" : "pb-[3px]",
         )}
       >
@@ -304,7 +304,7 @@ export function Sheet({
         <div
           className={cn(
             "animate-sheet-up flex flex-col overflow-hidden rounded-t-[24px] bg-[#171717] light:bg-[#f2f2f2] lg:w-[520px] lg:rounded-[24px] lg:border lg:border-fg/10 lg:shadow-2xl lg:shadow-black",
-            full ? "h-[calc(100dvh-44px)] lg:h-[min(760px,calc(100dvh-96px))]" : "max-h-[85dvh]",
+            full ? "h-[calc(var(--app-h)-44px)] lg:h-[min(760px,calc(100dvh-96px))]" : "max-h-[85dvh]",
           )}
           onClick={(e) => e.stopPropagation()}
         >
