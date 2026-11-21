@@ -80,6 +80,9 @@ export function Header({
         className={cn(
           "sticky top-0 z-30 bg-sbb-red px-2 text-white pt-[max(var(--safe-top),6px)] lg:flex lg:h-16 lg:items-center lg:gap-8 lg:px-8 lg:pt-0 lg:pb-0",
           children ? "pb-4" : "pb-[3px]",
+          // One continuous shade from mid-toggle down into the skirt, painted over the toggle too,
+          // as SBB does, so the red reads as a single surface rather than slab + strip + skirt.
+          extend && !!children && "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-[38px] after:bg-gradient-to-b after:from-transparent after:to-black/[0.043] lg:after:hidden",
         )}
       >
         <div className="relative flex h-10 items-center justify-center lg:justify-start">
@@ -97,7 +100,7 @@ export function Header({
         </div>
         {children && <div className="mt-[2.5px] lg:mt-0 lg:w-[380px]">{children}</div>}
       </header>
-      {extend && <div aria-hidden className={cn("bg-gradient-to-b from-sbb-red to-[#d60000] lg:hidden", children ? "h-6" : "h-[27.5px]")} />}
+      {extend && <div aria-hidden className={cn("bg-gradient-to-b to-[#db0000] lg:hidden", children ? "h-6 from-[#e10000]" : "h-[27.5px] from-sbb-red")} />}
     </>
   );
 }

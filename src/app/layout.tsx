@@ -19,6 +19,10 @@ export const viewport: Viewport = {
   // width scale the whole UI proportionally instead of reflowing it larger/smaller.
   width: 393,
   initialScale: undefined,
+  // No pinch/double-tap zoom: the app should feel native. (Not maximumScale: on phones wider
+  // than 393pt the fitted scale is above 1, so capping it would break the proportional fit.)
+  // iOS Safari ignores this flag, so IOS_PWA_SCRIPT and globals.css also block the gestures.
+  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -42,6 +46,9 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"
  */
 const IOS_PWA_SCRIPT = `(function(){
 var d=document.documentElement,n=navigator;
+/* iOS ignores user-scalable=no; cancelling its pinch gesture events is what stops page zoom
+   (MapLibre pinch-zooms its maps from touch events, so maps keep working). */
+["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault()},{passive:false})});
 try{var q=location.search.match(/[?&]vp(=0)?\\b/);if(q)localStorage.setItem("sbb-vp",q[1]?"":"1")}catch(e){}
 var debug=false;try{debug=localStorage.getItem("sbb-vp")==="1"}catch(e){}
 var ios=/iP(hone|od|ad)/.test(n.userAgent)||(n.platform==="MacIntel"&&n.maxTouchPoints>1);
