@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { Header, ErrorBox, Overlap, Spinner } from "@/components/ui";
+import { Header, ErrorBox, Overlap } from "@/components/ui";
+import { ConnectionListSkeleton } from "@/components/skeletons";
 import { ConnectionCard } from "@/components/journey";
 import { CheaperNearby, DayPrices } from "@/components/cheaper-nearby";
 import { JourneySearchCard } from "@/components/journey-search-card";
@@ -23,6 +24,8 @@ type Result = {
   /** The connection the search was for: the first departure, or the last arrival of an arrive-by search. */
   asked: Connection | null;
   nearby: Connection[];
+  /** Still looking up the departures around `asked`. */
+  scanning: boolean;
   /** When the results arrived (epoch seconds): nothing earlier can still be caught. */
   since: number;
 };
@@ -33,10 +36,10 @@ export function ConnectionsView() {
   const query = journeyFromSearchParams(new URLSearchParams(sp.toString()));
   const queryKey = sp.toString();
 
-  // Results are tagged with the query they belong to, so a new query shows a spinner.
+  // Results are tagged with the query they belong to, so a new query shows placeholders.
   // `asked` is the connection the search was for; `nearby` are departures around it
   // that aren't listed, fetched only to suggest a cheaper time to leave.
-  const [result, setResult] = useState<Result>({ key: "", items: null, error: null, asked: null, nearby: [], since: 0 });
+  const [result, setResult] = useState<Result>({ key: "", items: null, error: null, asked: null, nearby: [], scanning: false, since: 0 });
   const [retry, setRetry] = useState(0);
   const [loadingMore, setLoadingMore] = useState<"earlier" | "later" | null>(null);
   const [showPrices, setShowPrices] = useState(true);
@@ -55,11 +58,12 @@ export function ConnectionsView() {
         const items = uniqueConnections(found);
         const asked = (q.isArrivalTime ? items.at(-1) : items[0]) ?? null;
         const since = Date.now() / 1000;
-        setResult({ key, items, error: null, asked, nearby: [], since });
+        setResult({ key, items, error: null, asked, nearby: [], scanning: !!asked, since });
         if (!asked) return;
         await fetchNearby(q, asked, items, since, (found) => setResult((r) => (r.key === key ? { ...r, nearby: [...r.nearby, ...found] } : r)), ctrl.signal);
+        setResult((r) => (r.key === key ? { ...r, scanning: false } : r));
       })
-      .catch((e: Error) => e.name !== "AbortError" && setResult((r) => (r.key === key ? r : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], since: 0 })));
+      .catch((e: Error) => e.name !== "AbortError" && setResult((r) => (r.key === key ? r : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], scanning: false, since: 0 })));
     return () => {
       ctrl.abort();
       dayScan.current?.abort();
@@ -118,6 +122,8 @@ export function ConnectionsView() {
   const hasChoice = cheaper.length !== other.length || cheaper.some((s, i) => connectionKey(s.connection) !== connectionKey(other[i].connection));
   const asked = showPrices && current ? result.asked : null;
   const ahead = !!asked && plannedAhead(asked, result.since);
+  // Nothing cheaper yet, but departures around the asked one are still being looked up or priced.
+  const cheaperLoading = !!asked && (result.scanning || [...(items ?? []), ...result.nearby].some((c) => quoteOf(c) === null));
 
   function openDay() {
     if (!asked) return;
@@ -174,7 +180,7 @@ export function ConnectionsView() {
       <div className="lg:mt-6 lg:min-w-0">
       {firstDay("hidden h-8.5 items-center justify-between pr-1.75 pb-1.5 pl-[15px] lg:flex")}
       {error && <ErrorBox message={error} onRetry={load} />}
-      {!items && !error && <Spinner />}
+      {!items && !error && <ConnectionListSkeleton price={showPrices} />}
       {items?.length === 0 && <ErrorBox message="No connections found." />}
 
       {items && items.length > 0 && (
@@ -188,6 +194,7 @@ export function ConnectionsView() {
               window={searchWindow(asked, "price", result.since)}
               dayLabel={ahead ? `Cheapest times on ${formatShortDate(new Date((asked.from.departureTimestamp ?? 0) * 1000))}` : "Cheapest times today"}
               onOpenDay={openDay}
+              loading={cheaperLoading}
             />
           )}
           {groups.map((g, gi) => (

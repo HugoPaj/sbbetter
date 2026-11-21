@@ -154,7 +154,8 @@ export function PillToggle<T extends string>({
           key={o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "-my-px flex flex-1 items-center justify-center rounded-full text-[16px] font-light tracking-tight",
+            // Same height as the track: a taller pill gets cut off where the toggle sits at the edge of a scroll area (sheets).
+            "flex flex-1 items-center justify-center rounded-full text-[16px] font-light tracking-tight",
             o.value === value && "border border-fg/45 bg-surface-3",
           )}
         >
@@ -355,6 +356,11 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
 
 export function Spinner() {
   return <div className="mx-auto my-8.5 size-6.75 animate-spin rounded-full border-2 border-fg/20 border-t-fg" />;
+}
+
+/** A placeholder block for content that is still loading. Size and shape it with `className`. */
+export function Skeleton({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("block animate-pulse rounded-[5px] bg-fg/10 motion-reduce:animate-none", className)} />;
 }
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {

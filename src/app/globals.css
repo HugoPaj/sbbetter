@@ -63,7 +63,19 @@ body {
 
 body {
   font-family: var(--font-sans);
+  overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Phones: the document is locked to one screen; the app column (#app-scroll) scrolls instead,
+   so iOS Safari never rubber-bands or scrolls the whole page. */
+@media (width < 64rem) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }
 
 /* Hide scrollbars inside the phone frame but keep scrolling. */
@@ -119,6 +131,94 @@ body {
 }
 [data-theme="light"] .maplibregl-map .maplibregl-ctrl-attrib-button {
   filter: none;
+}
+
+/*
+ * Illustrated empty states (components/scene.tsx): night in the dark theme, day in
+ * the light one. `wall` is the platform wall at the station and the carriage wall
+ * on the commute; the last block of each palette is the carriage interior.
+ */
+.scene {
+  --sc-sky-top: #222c44;
+  --sc-sky-bottom: #55617f;
+  --sc-stars: 0.8;
+  --sc-rock-lit: #8b93a8;
+  --sc-rock-shade: #4b5368;
+  --sc-snow: #e6eaf2;
+  --sc-hills: #3d465c;
+  --sc-shore: #2b4329;
+  --sc-water-top: #4c6a80;
+  --sc-water-bottom: #2b4257;
+  --sc-ripple: #86a3b5;
+  --sc-grass-top: #35502f;
+  --sc-grass-bottom: #111f14;
+  --sc-pine: #16291b;
+  --sc-train: #d9dce3;
+  --sc-train-window: #f5d98a;
+  --sc-wall: #232a3a;
+  --sc-canopy: #39425a;
+  --sc-post: #2b3348;
+  --sc-edge: #4a5674;
+  --sc-platform: #2c3448;
+  --sc-marking: #e9ecf3;
+
+  --sc-ceiling: #1b2133;
+  --sc-window: #3b4666;
+  --sc-view: #2f3a57;
+  --sc-orb: #dfe5f2;
+  --sc-floor: #141a2a;
+  --sc-seat: #1d2f5c;
+  --sc-headrest: #24386b;
+}
+.scene-station {
+  --sc-sky-top: #1a2233;
+  --sc-sky-bottom: #4a5674;
+}
+.scene-commute {
+  --sc-sky-top: #0c111c;
+  --sc-sky-bottom: #262d45;
+  --sc-wall: #2a3149;
+}
+[data-theme="light"] .scene {
+  --sc-sky-top: #74b4e8;
+  --sc-sky-bottom: #dcedf9;
+  --sc-stars: 0;
+  --sc-rock-lit: #b9c2d0;
+  --sc-rock-shade: #76839a;
+  --sc-snow: #fff;
+  --sc-hills: #6f8498;
+  --sc-shore: #5f9552;
+  --sc-water-top: #74b7dd;
+  --sc-water-bottom: #3f8fc1;
+  --sc-ripple: #e2f2fb;
+  --sc-grass-top: #86bd66;
+  --sc-grass-bottom: #44843d;
+  --sc-pine: #2c5c35;
+  --sc-train: #f1f3f6;
+  --sc-train-window: #3c4859;
+  --sc-wall: #b9c1cf;
+  --sc-canopy: #6f7a8f;
+  --sc-post: #5f697d;
+  --sc-edge: #8791a3;
+  --sc-platform: #c9ced7;
+  --sc-marking: #fff;
+
+  --sc-ceiling: #cdd3dd;
+  --sc-window: #a9d5f3;
+  --sc-view: #7fb47a;
+  --sc-orb: #fff3bf;
+  --sc-floor: #b4bbc7;
+  --sc-seat: #2f4b92;
+  --sc-headrest: #3b59a6;
+}
+[data-theme="light"] .scene-station {
+  --sc-sky-top: #8ec0ea;
+  --sc-sky-bottom: #e4f1fa;
+}
+[data-theme="light"] .scene-commute {
+  --sc-sky-top: #f2f4f7;
+  --sc-sky-bottom: #dde1e8;
+  --sc-wall: #e6e9ee;
 }
 
 @keyframes sheet-up {

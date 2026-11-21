@@ -158,6 +158,11 @@ function setSelf(map: MapLibreMap, center: { lat: number; lon: number }, show: b
 
 const NONE: ReadonlySet<string> = new Set();
 
+/** Stops are only loaded and shown from this zoom in; further out they would pile up into a clump. */
+const STOPS_MIN_ZOOM = 13.5;
+/** Fades the stops out over the half zoom level before they are hidden. */
+const STOPS_FADE = ["interpolate", ["linear"], ["zoom"], STOPS_MIN_ZOOM - 0.5, 0, STOPS_MIN_ZOOM, 1] as ["interpolate", ["linear"], ["zoom"], ...number[]];
+
 function addOverlays(map: MapLibreMap, dark: boolean) {
   if (map.getSource("stops")) return;
   map.addSource("stops", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -165,12 +170,21 @@ function addOverlays(map: MapLibreMap, dark: boolean) {
     id: "stops",
     type: "circle",
     source: "stops",
-    paint: { "circle-radius": 5, "circle-color": dark ? "#dcdcdc" : "#222", "circle-stroke-color": dark ? "#000" : "#fff", "circle-stroke-width": 1.5 },
+    minzoom: STOPS_MIN_ZOOM - 0.5,
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], STOPS_MIN_ZOOM, 3.5, 15, 5],
+      "circle-color": dark ? "#dcdcdc" : "#222",
+      "circle-stroke-color": dark ? "#000" : "#fff",
+      "circle-stroke-width": 1.5,
+      "circle-opacity": STOPS_FADE,
+      "circle-stroke-opacity": STOPS_FADE,
+    },
   });
   map.addLayer({
     id: "stop-labels",
     type: "symbol",
     source: "stops",
+    minzoom: STOPS_MIN_ZOOM - 0.5,
     layout: {
       "text-field": ["get", "name"],
       "text-size": 13,
@@ -179,7 +193,7 @@ function addOverlays(map: MapLibreMap, dark: boolean) {
       "text-max-width": 9,
       "text-font": ["Montserrat Medium", "Open Sans Regular", "Noto Sans Regular", "Noto Sans CJK JP Regular"],
     },
-    paint: { "text-color": dark ? "#e6e6e6" : "#1a1a1a", "text-halo-color": dark ? "#000" : "#fff", "text-halo-width": 1.2 },
+    paint: { "text-color": dark ? "#e6e6e6" : "#1a1a1a", "text-halo-color": dark ? "#000" : "#fff", "text-halo-width": 1.2, "text-opacity": STOPS_FADE },
   });
   map.addSource("self", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   map.addLayer({
@@ -211,7 +225,7 @@ function applyStops(map: MapLibreMap, o: Overlay) {
 }
 
 async function loadStops(map: MapLibreMap, o: Overlay) {
-  if (map.getZoom() < 13) return;
+  if (map.getZoom() < STOPS_MIN_ZOOM) return;
   inflight?.abort();
   inflight = new AbortController();
   const c = map.getCenter();
