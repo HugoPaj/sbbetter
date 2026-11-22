@@ -1,3 +1,4 @@
+import { appUrl } from "./app-url";
 import type { Section } from "./transport";
 
 /**
@@ -124,7 +125,7 @@ export function estimate(model: DelayModel, section: Section, weather: Weather |
 let loading: Promise<DelayModel> | null = null;
 /** The model is ~MBs, so it is fetched once, lazily, from /public. */
 export function loadDelayModel(): Promise<DelayModel> {
-  loading ??= fetch("/delay-model.json")
+  loading ??= fetch(appUrl("/delay-model.json"))
     .then((r) => {
       if (!r.ok) throw new Error(`delay model: HTTP ${r.status}`);
       return r.json() as Promise<DelayModel>;

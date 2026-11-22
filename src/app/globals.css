@@ -276,9 +276,19 @@ body {
   --sc-table: #4a5370;
   --sc-steam: #c9cfdd;
 }
+/* Darker than the other night scenes so the people stand out against the platform. */
 .scene-station {
-  --sc-sky-top: #141c30;
-  --sc-sky-bottom: #4f5b7b;
+  --sc-sky-top: #0a0f1c;
+  --sc-sky-bottom: #2c3550;
+  --sc-wall: #141926;
+  --sc-wall-line: #1e2536;
+  --sc-canopy: #262d40;
+  --sc-canopy-lit: #3a435c;
+  --sc-post: #1a2030;
+  --sc-edge: #3a435c;
+  --sc-platform: #151a27;
+  --sc-platform-lit: #1f2536;
+  --sc-platform-line: #232a3d;
 }
 .scene-commute {
   --sc-wall: #2a3149;

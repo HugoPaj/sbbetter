@@ -1,3 +1,4 @@
+import { appUrl } from "./app-url";
 import { causeCode, forecast } from "./disruption-forecast";
 import { queryForConnection } from "./connection-key";
 import { zurichDateTime } from "./format";
@@ -67,7 +68,7 @@ export type LineMemory = {
 let loading: Promise<LineMemory> | null = null;
 /** ~100 KB, fetched once, lazily, from /public. */
 export function loadLineMemory(): Promise<LineMemory> {
-  loading ??= fetch("/line-memory.json").then((r) => {
+  loading ??= fetch(appUrl("/line-memory.json")).then((r) => {
     if (!r.ok) throw new Error(`line memory: ${r.status}`);
     return r.json();
   });

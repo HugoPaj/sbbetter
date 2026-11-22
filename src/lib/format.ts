@@ -12,6 +12,14 @@ export function formatShortDate(d: Date): string {
   return `${wd} ${dm}.`.replace("..", ".");
 }
 
+/** "Today", "Tomorrow", else "Sat 21.11." (Zurich days). */
+export function formatDay(d: Date, nowMs: number = Date.now()): string {
+  const day = (x: Date) => zurichDateTime(x).date;
+  if (day(d) === day(new Date(nowMs))) return "Today";
+  if (day(d) === day(new Date(nowMs + 86_400_000))) return "Tomorrow";
+  return formatShortDate(d);
+}
+
 /** "Saturday 21.11.2026" */
 export function formatLongDate(d: Date): string {
   const wd = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: TZ }).format(d);

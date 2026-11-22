@@ -4,8 +4,15 @@
  *
  * OJP Fare prices whole OJP Trips, so ojpConnections() hands every raw <Trip>
  * to rememberTrip() and puts the returned handle on the connection as
- * `fareRef`. The browser later asks /api/transport/fares?refs=… and we send
+ * `fareRef`. The browser later posts the refs to /api/transport/fares and we send
  * the stored trip to OJP Fare.
+ *
+ * The ref carries the trip itself (deflated, signed with a key derived from the
+ * API key): "<mac>.<trip>". On serverless hosting the fares request may reach
+ * another instance than the one that answered /connections, so any instance
+ * must be able to price a ref on its own. The signature stops a client from
+ * having us send arbitrary XML with our key. The in-memory map below is only a
+ * shortcut that saves inflating the same trip again.
  *
  * A ref may name a stretch of the trip, "<ref>~<leg>.<stop>-<leg>.<stop>" (see
  * partRef() in src/lib/passes.ts): when a travelcard covers the rest, only that
@@ -15,7 +22,8 @@
  * (separate from OJP 2.0). Until then every call returns 403 and the UI falls
  * back to the estimate in src/lib/pricing.ts.
  */
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import type { FaresResponse, NovaFare } from "../transport";
 import { OjpHttpError, num, ojpPost, parseOjp, text } from "./ojp";
 
@@ -39,6 +47,11 @@ let blockedUntil = 0;
 
 /** OJP Fare is a separate API product; its key may differ from the OJP 2.0 one. */
 const fareKey = () => process.env.OJP_FARE_API_KEY || process.env.OJP_API_KEY;
+/** Signs fare refs. Derived from the API key, so every instance agrees on it without extra config. */
+const refSecret = () => createHash("sha256").update(`fare-ref:${process.env.FARE_REF_SECRET || fareKey() || ""}`).digest();
+const macOf = (blob: string) => createHmac("sha256", refSecret()).update(blob).digest("base64url").slice(0, 22);
+/** Largest inflated trip we accept from a ref (a long trip with every stop is ~100 KB). */
+const MAX_TRIP_BYTES = 512 * 1024;
 export const faresEnabled = () => Boolean(fareKey());
 let warned = false;
 
@@ -55,14 +68,46 @@ export function rememberTrip(xml: string, parents: Map<string, string>): string 
     .replace(/<EstimatedQuay>[\s\S]*?<\/EstimatedQuay>/g, "")
     .replace(/<SituationFullRefs>[\s\S]*?<\/SituationFullRefs>/g, "")
     .replace(/<siri:ExpectedDepartureOccupancy>[\s\S]*?<\/siri:ExpectedDepartureOccupancy>/g, "");
-  const ref = createHash("sha1").update(clean).digest("base64url").slice(0, 16);
+  const blob = deflateRawSync(clean, { level: 9 }).toString("base64url");
+  const mac = macOf(blob);
+  remember(mac, clean);
+  return `${mac}.${blob}`;
+}
+
+function remember(mac: string, xml: string) {
   if (trips.size >= MAX_TRIPS) {
     const now = Date.now();
     for (const [k, v] of trips) if (v.expires < now || trips.size >= MAX_TRIPS) trips.delete(k);
   }
-  trips.set(ref, { xml: clean, expires: Date.now() + TRIP_TTL });
-  return ref;
+  trips.set(mac, { xml, expires: Date.now() + TRIP_TTL });
 }
+
+/** The trip XML a ref's base ("<mac>.<trip>") carries: from memory, else inflated after checking its signature. */
+function tripOf(base: string): string | null {
+  const dot = base.indexOf(".");
+  if (dot < 0) return null;
+  const mac = base.slice(0, dot);
+  const held = trips.get(mac);
+  if (held && held.expires >= Date.now()) return held.xml;
+  const blob = base.slice(dot + 1);
+  const want = Buffer.from(macOf(blob));
+  const got = Buffer.from(mac);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
+  try {
+    const xml = inflateRawSync(Buffer.from(blob, "base64url"), { maxOutputLength: MAX_TRIP_BYTES }).toString("utf8");
+    remember(mac, xml);
+    return xml;
+  } catch {
+    return null;
+  }
+}
+
+/** Short cache key for a ref: its signature plus the stretch, not the whole trip. */
+const shortRef = (ref: string) => {
+  const [base, stretch] = ref.split("~");
+  const mac = base.split(".")[0];
+  return stretch === undefined ? mac : `${mac}~${stretch}`;
+};
 
 /**
  * OJP Fare allows 50 calls a minute per key. We stay under it ourselves and
@@ -174,23 +219,23 @@ export function cutTrip(xml: string, a: { leg: number; stop: number }, b: { leg:
 }
 
 /** The stored trip for a ref, cut to its stretch if the ref names one. */
-function tripXml(ref: string): string | null {
+export function tripXml(ref: string): string | null {
   const [base, stretch] = ref.split("~");
-  const trip = trips.get(base);
-  if (!trip || trip.expires < Date.now()) return null; // server restarted or stale: client re-searches
-  if (stretch === undefined) return trip.xml;
+  const xml = tripOf(base);
+  if (!xml) return null; // not a ref we signed
+  if (stretch === undefined) return xml;
   const m = /^(\d+)\.(\d+)-(\d+)\.(\d+)$/.exec(stretch);
-  return m ? cutTrip(trip.xml, { leg: +m[1], stop: +m[2] }, { leg: +m[3], stop: +m[4] }) : null;
+  return m ? cutTrip(xml, { leg: +m[1], stop: +m[2] }, { leg: +m[3], stop: +m[4] }) : null;
 }
 
-const fareCacheKey = (ref: string, halfFare: boolean) => `${ref}:${halfFare ? "hta" : "full"}`;
+const fareCacheKey = (ref: string, halfFare: boolean) => `${shortRef(ref)}:${halfFare ? "hta" : "full"}`;
 
 /** A price we can give without calling OJP Fare: cached, or null for a trip we no longer hold. */
 function cachedFare(ref: string, halfFare: boolean): NovaFare | null | undefined {
   const hit = fares.get(fareCacheKey(ref, halfFare));
   if (hit && hit.expires > Date.now()) return hit.fare;
   if (hit) fares.delete(fareCacheKey(ref, halfFare));
-  return tripXml(ref) ? undefined : null; // server restarted or stale: client re-searches
+  return tripXml(ref) ? undefined : null; // a ref we didn't sign, or a stretch the trip doesn't have
 }
 
 async function priceTrip(ref: string, halfFare: boolean, signal?: AbortSignal): Promise<NovaFare | null> {

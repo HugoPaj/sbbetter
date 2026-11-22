@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ojpConnections, ojpEnabled, ojpLocations, ojpNearby, ojpStationboard, parseCoord } from "@/lib/server/ojp";
 import { faresEnabled, ojpFares } from "@/lib/server/ojp-fare";
+import { TTL, cacheKey, shared } from "@/lib/server/upstream-cache";
 import type { Connection, FaresResponse, Location } from "@/lib/transport";
 
 /**
@@ -11,8 +12,12 @@ import type { Connection, FaresResponse, Location } from "@/lib/transport";
  *
  * The `X-Data-Source` response header says which upstream answered.
  *
- * /api/transport/fares?refs=a,b&hta=1 prices OJP connections (by their
- * `fareRef`) with real NOVA prices via the OJP Fare API.
+ * Identical requests share one upstream call and its answer for a few seconds
+ * (src/lib/server/upstream-cache.ts), to stay under OJP's rate limit.
+ *
+ * POST /api/transport/fares {refs, hta} prices OJP connections (by their
+ * `fareRef`) with real NOVA prices via the OJP Fare API. It is a POST because
+ * a ref carries its whole trip (see ojp-fare.ts), too long for a URL.
  */
 
 const OPENDATA = "https://transport.opendata.ch/v1";
@@ -21,14 +26,14 @@ const ALLOWED = new Set(["locations", "connections", "stationboard"]);
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/transport/[...path]">) {
   const { path } = await ctx.params;
   const endpoint = path.join("/");
-  if (endpoint === "fares") return fares(request);
+  if (endpoint === "fares") return Response.json({ error: "Use POST" }, { status: 405, headers: { Allow: "POST" } });
   if (!ALLOWED.has(endpoint)) return Response.json({ error: `Unknown endpoint: ${endpoint}` }, { status: 404 });
   const sp = request.nextUrl.searchParams;
   const signal = request.signal;
 
   if (ojpEnabled()) {
     try {
-      const body = await fromOjp(endpoint, sp, signal);
+      const body = await shared(cacheKey("ojp", endpoint, sp), TTL[endpoint], (s) => fromOjp(endpoint, sp, s), signal);
       if (body) return json(body, "ojp");
     } catch (err) {
       if (signal.aborted) return new Response(null, { status: 499 });
@@ -37,18 +42,21 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/transpor
   }
 
   try {
-    return json(await fromOpendata(endpoint, sp, signal), "opendata");
+    return json(await shared(cacheKey("opendata", endpoint, sp), TTL[endpoint], (s) => fromOpendata(endpoint, sp, s), signal), "opendata");
   } catch (err) {
+    if (signal.aborted) return new Response(null, { status: 499 });
     return Response.json({ error: (err as Error).message }, { status: 502 });
   }
 }
 
-async function fares(request: NextRequest) {
-  const sp = request.nextUrl.searchParams;
-  const refs = (sp.get("refs") ?? "").split(",").filter(Boolean).slice(0, 12);
+export async function POST(request: NextRequest, ctx: RouteContext<"/api/transport/[...path]">) {
+  const { path } = await ctx.params;
+  if (path.join("/") !== "fares") return Response.json({ error: "Not found" }, { status: 404 });
+  const input = (await request.json().catch(() => null)) as { refs?: unknown; hta?: unknown } | null;
+  const refs = (Array.isArray(input?.refs) ? input.refs : []).filter((r): r is string => typeof r === "string" && r.length > 0).slice(0, 12);
   const body: FaresResponse =
-    faresEnabled() && refs.length ? await ojpFares(refs, sp.get("hta") === "1", request.signal) : { available: faresEnabled(), fares: {} };
-  return Response.json(body, { headers: { "Cache-Control": "private, max-age=300", "X-Data-Source": "ojp-fare" } });
+    faresEnabled() && refs.length ? await ojpFares(refs, input?.hta === true, request.signal) : { available: faresEnabled(), fares: {} };
+  return Response.json(body, { headers: { "Cache-Control": "no-store", "X-Data-Source": "ojp-fare" } });
 }
 
 function json(body: unknown, source: "ojp" | "opendata") {

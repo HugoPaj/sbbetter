@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Search, Trash2 } from "lucide-react";
 import { Card, Checkbox, InfoLine, OutlineButton, PrimaryButton, Radio, Sheet, Toggle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
+import { checkCommuteNow, currentSubscription, disableCommuteAlerts, enableCommuteAlerts, pushSupport } from "@/lib/push";
 import { THEME_OPTIONS, setTheme, useThemeChoice } from "@/lib/theme";
 import { NATIONAL, travelcardNames, useCatalog, useTravelcards, type NationalId, type ZonePassMeta } from "@/lib/travelcards";
 
@@ -32,6 +33,78 @@ function ToggleRow({ label, hint, on, onChange }: { label: string; hint?: string
       </div>
       <Toggle on={on} onChange={onChange} />
     </div>
+  );
+}
+
+/**
+ * Real push notifications for the commuter route: before each commute, when the usual train is
+ * late, likely late (delay forecast) or its line is closed, with the Plan B (see lib/commute-alert.ts).
+ */
+function CommuteAlerts() {
+  const { commute } = useAppState();
+  // Whether this device is subscribed; unknown until the worker answers.
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    currentSubscription()
+      .then((s) => live && setOn(!!s))
+      .catch(() => live && setOn(false));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const support = typeof window === "undefined" ? "ok" : pushSupport();
+  const hint =
+    support === "install"
+      ? "Add the app to your Home Screen to get these (Share → Add to Home Screen)"
+      : support === "blocked"
+        ? "Notifications are blocked for this app in your settings"
+        : support === "unsupported"
+          ? "Not available in this browser"
+          : commute
+            ? `Before ${commute.outTime} and ${commute.backTime}: delays, likely delays and closed lines, with a Plan B`
+            : "Set up your commuter route on Plan first";
+
+  const toggle = async (next: boolean) => {
+    if (busy) return;
+    if (next && support !== "ok") return toast(hint + ".");
+    if (next && !commute) return toast("Set up your commuter route on Plan first.");
+    setBusy(true);
+    try {
+      if (next) await enableCommuteAlerts(commute!);
+      else await disableCommuteAlerts();
+      setOn(next);
+      toast(next ? "Commute alerts on. You’ll hear from us before you leave." : "Commute alerts off.");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const check = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await checkCommuteNow();
+      toast("Checked. The notification is on its way.");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <ToggleRow label="Commuter route" hint={hint} on={!!on} onChange={toggle} />
+      {on && (
+        <button onClick={check} disabled={busy} className="w-full border-b border-surface-3 px-4 py-[13px] text-left text-[14.5px] font-light underline underline-offset-2 disabled:opacity-50">
+          Check my commute now
+        </button>
+      )}
+    </>
   );
 }
 
@@ -323,12 +396,12 @@ function Notifications() {
     <>
       <Card className="overflow-hidden">
         <SettingToggle id="notif.trips" fallback label="Saved trips" hint="Delays, platform changes and cancellations on your saved journeys" />
-        <SettingToggle id="notif.commute" fallback label="Commuter route" hint="Service changes on your commuter route" />
+        <CommuteAlerts />
         <SettingToggle id="notif.tickets" fallback label="Tickets" hint="Reminder before a ticket or travelcard expires" />
         <SettingToggle id="notif.easyride" label="EasyRide" hint="Reminder to check out" />
         <SettingToggle id="notif.news" label="Rail service information" hint="Major disruptions on the Swiss rail network" />
       </Card>
-      <Note>Demo: preferences are saved on this device; no push notifications are sent.</Note>
+      <Note>Commuter route alerts are real push notifications. The other switches are a demo: they are saved on this device, but nothing is sent.</Note>
     </>
   );
 }

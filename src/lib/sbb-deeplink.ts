@@ -155,23 +155,42 @@ function appPath(conn: Connection, ticket: { travelClass: 1 | 2; returnTrip: boo
   return `timetable?${params}`;
 }
 
+/** Where to send someone to buy: the SBB Mobile path (without scheme) and the sbb.ch fallback. Stored with a pending purchase to reopen it. */
+export type SbbHandoff = { path: string; web: string };
+
+export function sbbHandoff(conn: Connection, ticket: { travelClass: 1 | 2; returnTrip: boolean }): SbbHandoff {
+  return { path: appPath(conn, ticket), web: sbbWebLink(conn) };
+}
+
 /**
- * Opens the connection in SBB Mobile, falling back to sbb.ch. Call from a click handler.
+ * Opens SBB Mobile at `path`, falling back to `web`. Call from a click handler.
  * Android: an intent with the web link as fallback. iOS: the app scheme, then sbb.ch
  * if the page is still showing (no app installed). Elsewhere: sbb.ch in a new tab.
  */
-export function openInSbb(conn: Connection, ticket: { travelClass: 1 | 2; returnTrip: boolean }): void {
-  const web = sbbWebLink(conn);
+export function openSbb({ path, web }: SbbHandoff): void {
   const ua = navigator.userAgent;
   if (/Android/i.test(ua)) {
-    window.location.href = `intent://${appPath(conn, ticket)}#Intent;scheme=sbbmobile;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(web)};end`;
+    window.location.href = `intent://${path}#Intent;scheme=sbbmobile;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(web)};end`;
   } else if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
     const fallback = setTimeout(() => {
       if (document.visibilityState === "visible") window.location.href = web;
     }, 1500);
     document.addEventListener("visibilitychange", () => clearTimeout(fallback), { once: true });
-    window.location.href = `sbbmobile://${appPath(conn, ticket)}`;
+    window.location.href = `sbbmobile://${path}`;
   } else {
     window.open(web, "_blank", "noopener");
   }
+}
+
+/** Opens the connection's ticket offer in SBB Mobile (sbb.ch without the app). */
+export function openInSbb(conn: Connection, ticket: { travelClass: 1 | 2; returnTrip: boolean }): void {
+  openSbb(sbbHandoff(conn, ticket));
+}
+
+/**
+ * Opens SBB Mobile itself, where a ticket bought there is shown (its Tickets tab). The app has
+ * no known link to one ticket, so this is as close as we get.
+ */
+export function openSbbApp(): void {
+  openSbb({ path: "", web: "https://www.sbb.ch/en" });
 }

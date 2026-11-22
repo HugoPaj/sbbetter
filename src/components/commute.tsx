@@ -4,6 +4,7 @@ import { useState } from "react";
 import { OutlineButton, PrimaryButton, Sheet, toast } from "./ui";
 import { LocationPicker } from "./plan/location-picker";
 import { actions, type Commute } from "@/lib/store";
+import { syncCommuteAlerts } from "@/lib/push";
 
 /** Sheet to create or edit the commuter route (home ↔ work, usual times). */
 export function CommuteSetup({ initial, onClose }: { initial: Commute | null; onClose: () => void }) {
@@ -37,6 +38,8 @@ export function CommuteSetup({ initial, onClose }: { initial: Commute | null; on
               if (!c.from || !c.to) return toast("Please choose your home and work stops.");
               if (!c.outTime || !c.backTime) return toast("Please set both departure times.");
               actions.set({ commute: c });
+              // Alerts follow the new route and times.
+              void syncCommuteAlerts(c);
               onClose();
               toast("Commuter route saved.");
             }}
@@ -48,6 +51,7 @@ export function CommuteSetup({ initial, onClose }: { initial: Commute | null; on
               className="mt-2.5"
               onClick={() => {
                 actions.set({ commute: null });
+                void syncCommuteAlerts(null);
                 onClose();
                 toast("Commuter route deleted.");
               }}

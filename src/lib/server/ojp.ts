@@ -88,15 +88,11 @@ export class OjpHttpError extends Error {
 
 export const parseOjp = (raw: string): X => parser.parse(raw);
 
-async function ojpRaw(body: string, signal?: AbortSignal): Promise<{ delivery: X; raw: string }> {
-  const raw = await ojpPost(body, { signal });
+/** The ServiceDelivery of a raw OJP response. */
+function deliveryOf(raw: string): X {
   const delivery = parseOjp(raw)?.OJP?.OJPResponse?.ServiceDelivery;
   if (!delivery) throw new Error("OJP: empty response");
-  return { delivery, raw };
-}
-
-async function ojp(body: string, signal?: AbortSignal): Promise<X> {
-  return (await ojpRaw(body, signal)).delivery;
+  return delivery;
 }
 
 /** Text out of `{Text: {"#text": …}}`, `{"#text": …}` or a plain string. */
@@ -207,30 +203,35 @@ async function placeRef(input: string, signal?: AbortSignal): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function ojpLocations(query: string, signal?: AbortSignal): Promise<Location[]> {
-  const d = await ojp(
+  const raw = await ojpPost(
     `<OJPLocationInformationRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <InitialInput><Name>${esc(query)}</Name></InitialInput>
       <Restrictions><Type>stop</Type><Type>address</Type><Type>poi</Type><NumberOfResults>12</NumberOfResults></Restrictions>
     </OJPLocationInformationRequest>`,
-    signal,
+    { signal },
   );
-  const results: X[] = d.OJPLocationInformationDelivery?.PlaceResult ?? [];
+  return parseLocationResponse(raw);
+}
+
+/** Stop search results from a raw OJP LocationInformation response. */
+export function parseLocationResponse(raw: string): Location[] {
+  const results: X[] = deliveryOf(raw).OJPLocationInformationDelivery?.PlaceResult ?? [];
   // Stops first (like the native app), then addresses / POIs.
   const locs = results.map((r) => placeToLocation(r)).filter((l): l is Location => !!l);
   return [...locs.filter((l) => l.icon), ...locs.filter((l) => !l.icon)];
 }
 
 export async function ojpNearby(lat: number, lon: number, signal?: AbortSignal): Promise<Location[]> {
-  const d = await ojp(
+  const raw = await ojpPost(
     `<OJPLocationInformationRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <InitialInput><GeoRestriction><Circle><Center><siri:Longitude>${lon}</siri:Longitude><siri:Latitude>${lat}</siri:Latitude></Center><Radius>1000</Radius></Circle></GeoRestriction></InitialInput>
       <Restrictions><Type>stop</Type><NumberOfResults>20</NumberOfResults></Restrictions>
     </OJPLocationInformationRequest>`,
-    signal,
+    { signal },
   );
-  const results: X[] = d.OJPLocationInformationDelivery?.PlaceResult ?? [];
+  const results: X[] = deliveryOf(raw).OJPLocationInformationDelivery?.PlaceResult ?? [];
   return results
     .map((r) => placeToLocation(r, { lat, lon }))
     .filter((l): l is Location => !!l?.id)
@@ -383,7 +384,7 @@ export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Pro
   // A ViaPoint is a place reference itself, not a wrapper around one.
   const viaPoint = via ? `\n      <Via><ViaPoint>${via.replace(/<\/?PlaceRef>/g, "")}</ViaPoint></Via>` : "";
   const when = `<DepArrTime>${zurichIso(q.date, q.time)}</DepArrTime>`;
-  const { delivery: d, raw } = await ojpRaw(
+  const raw = await ojpPost(
     `<OJPTripRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <Origin>${origin}${q.isArrivalTime ? "" : when}</Origin>
@@ -395,12 +396,20 @@ export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Pro
         <UseRealtimeData>explanatory</UseRealtimeData>${q.track ? "\n        <IncludeLegProjection>true</IncludeLegProjection>" : ""}
       </Params>
     </OJPTripRequest>`,
-    signal,
+    { signal },
   );
-  const delivery = d.OJPTripDelivery;
+  return parseTripResponse(raw, q.from);
+}
+
+/**
+ * Connections from a raw OJP Trip response, earliest first. `from` is the origin
+ * as asked for: from a coordinate, the walk to the first stop becomes `accessWalk`.
+ */
+export function parseTripResponse(raw: string, from: string): Connection[] {
+  const delivery = deliveryOf(raw).OJPTripDelivery;
   const coords = placeCoords(delivery?.TripResponseContext);
   const situations = situationsById(delivery?.TripResponseContext);
-  const origCoord = parseCoord(q.from);
+  const origCoord = parseCoord(from);
 
   // Keep each trip's raw XML so its fare can be requested later (OJP Fare needs the full Trip).
   const rawTrips = raw.match(/<Trip>[\s\S]*?<\/Trip>/g) ?? [];
@@ -566,7 +575,7 @@ export async function ojpStationboard(
   signal?: AbortSignal,
 ): Promise<{ station: Location; stationboard: StationboardEntry[] }> {
   const ref = await placeRef(station, signal);
-  const d = await ojp(
+  const raw = await ojpPost(
     `<OJPStopEventRequest>
       <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
       <Location>${ref}<DepArrTime>__NOW__</DepArrTime></Location>
@@ -576,9 +585,14 @@ export async function ojpStationboard(
         <IncludeRealtimeData>true</IncludeRealtimeData>
       </Params>
     </OJPStopEventRequest>`,
-    signal,
+    { signal },
   );
-  const delivery = d.OJPStopEventDelivery;
+  return parseStopEventResponse(raw, station);
+}
+
+/** A departure (or arrival) board from a raw OJP StopEvent response for `station` (id or name). */
+export function parseStopEventResponse(raw: string, station: string): { station: Location; stationboard: StationboardEntry[] } {
+  const delivery = deliveryOf(raw).OJPStopEventDelivery;
   const coords = placeCoords(delivery?.StopEventResponseContext);
   const results: X[] = delivery?.StopEventResult ?? [];
   const entries: StationboardEntry[] = results.map((r) => {

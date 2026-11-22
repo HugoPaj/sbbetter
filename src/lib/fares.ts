@@ -61,7 +61,11 @@ async function load(refs: string[], halfFare: boolean) {
   for (let i = 0; i < todo.length; i += 12) {
     const chunk = todo.slice(i, i + 12);
     try {
-      const res = await fetch(`/api/transport/fares?refs=${chunk.map(encodeURIComponent).join(",")}&hta=${halfFare ? 1 : 0}`);
+      const res = await fetch("/api/transport/fares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refs: chunk, hta: halfFare }),
+      });
       const data = (await res.json()) as FaresResponse;
       for (const r of chunk) {
         if (r in data.fares) cache.set(keyOf(r, halfFare), data.fares[r]);

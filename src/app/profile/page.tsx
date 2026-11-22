@@ -71,7 +71,7 @@ export default function ProfilePage() {
             Reset demo data
           </button>
         </div>
-        <div className="h-[calc(92px+var(--home-inset))]" />
+        <div className="h-[calc(112px+var(--home-inset))]" />
       </Overlap>
       {service && <ServiceSheet service={service} onClose={() => setService(null)} />}
       {sheet && <ProfileSheets sheet={sheet} onClose={() => setSheet(null)} />}

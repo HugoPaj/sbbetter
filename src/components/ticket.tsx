@@ -7,6 +7,7 @@ import { USER } from "@/lib/mock-data";
 import { actions, type Ticket } from "@/lib/store";
 import { formatDate, formatTime, zurichDateTime } from "@/lib/format";
 import { journeyHref } from "@/lib/journey-query";
+import { openSbbApp } from "@/lib/sbb-deeplink";
 
 /** Deterministic QR-looking pattern (NOT a real, scannable code). */
 export function FakeQr({ seed, className }: { seed: string; className?: string }) {
@@ -52,10 +53,18 @@ export function FakeQr({ seed, className }: { seed: string; className?: string }
 export function TicketSheet({ ticket, valid, onClose }: { ticket: Ticket; valid: boolean; onClose: () => void }) {
   const router = useRouter();
   const route = [ticket.from, ticket.to].filter(Boolean).join(" → ");
+  const inSbb = ticket.source === "sbb-app";
   const period = `${formatDate(new Date(ticket.validFrom))}, ${formatTime(ticket.validFrom)} – ${formatDate(new Date(ticket.validTo))}, ${formatTime(ticket.validTo)}`;
   return (
     <Sheet title={ticket.product} onClose={onClose} full={valid}>
-      {valid ? (
+      {valid && inSbb ? (
+        <div className="rounded-[14px] bg-surface p-4">
+          <p className="text-[14.5px] leading-snug font-light text-fg/85">You bought this ticket in the SBB app. Its code for inspection is there, in Tickets.</p>
+          <PrimaryButton className="mt-3" onClick={openSbbApp}>
+            Show ticket in the SBB app
+          </PrimaryButton>
+        </div>
+      ) : valid ? (
         <>
           <FakeQr seed={ticket.id} className="mx-auto aspect-square w-[72%] rounded-md" />
           <p className="mt-2 text-center text-[12px] font-light text-muted">Demo code — not a valid ticket.</p>
@@ -71,8 +80,8 @@ export function TicketSheet({ ticket, valid, onClose }: { ticket: Ticket; valid:
         <InfoLine label={ticket.to ? "Via" : "Details"} value={ticket.via} />
         <InfoLine label="Class" value={ticket.travelClass === 1 ? "1st class" : "2nd class"} />
         <InfoLine label="Validity" value={period} />
-        <InfoLine label="Price" value={`CHF ${ticket.price.toFixed(2)}`} />
-        <InfoLine label="Ticket ID" value={ticket.id} />
+        <InfoLine label="Price" value={`${inSbb ? "about " : ""}CHF ${ticket.price.toFixed(2)}`} />
+        {inSbb ? <InfoLine label="Bought in" value="SBB app" /> : <InfoLine label="Ticket ID" value={ticket.id} />}
       </Card>
       <div className="mt-4 space-y-2.5">
         {ticket.to && (
@@ -86,7 +95,17 @@ export function TicketSheet({ ticket, valid, onClose }: { ticket: Ticket; valid:
             {valid ? "Show connections" : "Buy again"}
           </PrimaryButton>
         )}
-        {valid && (
+        {inSbb ? (
+          <OutlineButton
+            onClick={() => {
+              actions.removeTicket(ticket.id);
+              onClose();
+              toast("Removed from SBBetter. To refund the ticket, use the SBB app.");
+            }}
+          >
+            Remove from SBBetter
+          </OutlineButton>
+        ) : valid && (
           <OutlineButton
             onClick={() => {
               actions.removeTicket(ticket.id);

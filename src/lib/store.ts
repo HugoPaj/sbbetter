@@ -22,6 +22,22 @@ export type Ticket = {
   travelClass: 1 | 2;
   /** The journey it was bought for (tickets from Offers): Plan's Upcoming opens it. */
   trip?: TicketTrip;
+  /** Bought in the SBB app: the real ticket (and its code) is there; this is the traveller's own record of it. */
+  source?: "sbb-app";
+};
+
+/**
+ * A ticket handed over to the SBB app to buy, not yet confirmed. The SBB app can't tell us whether
+ * it was bought, so the app asks once the traveller is back (components/purchase-return.tsx).
+ */
+export type PendingPurchase = {
+  ticket: Ticket;
+  /** Save this trip too once bought (Offers' "save the journey" setting). */
+  trip?: SavedTrip;
+  /** To open the SBB app on the same offer again. */
+  sbb: { path: string; web: string };
+  /** When the traveller left for the SBB app (epoch ms). */
+  at: number;
 };
 
 /** A ticket's journey: enough to reopen its trip overview. */
@@ -34,6 +50,8 @@ export type SavedTrip = {
   departure: string; // ISO
   arrival: string; // ISO
   summary: string; // e.g. "B 701 → RE 33"
+  /** The first stop boarded, shown instead of a "Current location" start (see lib/trip-label). */
+  fromStop?: string;
   /** Extra URL params to reopen it (e.g. a re-routed onward connection). */
   params?: Record<string, string>;
 };
@@ -56,9 +74,10 @@ type State = {
   travelcards: TravelcardSelection;
   /** Free-form persisted switches / choices (profile settings, shop stop, …). */
   settings: Record<string, SettingValue>;
+  pendingPurchase: PendingPurchase | null;
 };
 
-const EXTRA = { coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, recentStops: [] as RecentStop[], travelcards: DEFAULT_TRAVELCARDS, settings: {} as Record<string, SettingValue> };
+const EXTRA = { coPassengers: [] as CoPassenger[], plates: [] as string[], commute: null, recentStops: [] as RecentStop[], travelcards: DEFAULT_TRAVELCARDS, settings: {} as Record<string, SettingValue>, pendingPurchase: null as PendingPurchase | null };
 const fresh = (): State => ({ tickets: seedExpiredTickets(), trips: [], ...EXTRA });
 
 const KEY = "sbb-proto-state-v1";
@@ -123,6 +142,21 @@ export const actions = {
   addTicket(t: Ticket) {
     const s = load();
     save({ ...s, tickets: [t, ...s.tickets] });
+  },
+  /** Leaving for the SBB app to buy: remember what, to ask about it on return. */
+  startPurchase(p: PendingPurchase) {
+    save({ ...load(), pendingPurchase: p });
+  },
+  /** Bought: the ticket (and its trip, if asked to save it) are added. */
+  confirmPurchase() {
+    const s = load();
+    const p = s.pendingPurchase;
+    if (!p) return;
+    const trips = p.trip && !s.trips.some((t) => t.id === p.trip!.id) ? [p.trip, ...s.trips] : s.trips;
+    save({ ...s, pendingPurchase: null, tickets: [p.ticket, ...s.tickets], trips });
+  },
+  cancelPurchase() {
+    save({ ...load(), pendingPurchase: null });
   },
   toggleTrip(trip: SavedTrip) {
     const s = load();

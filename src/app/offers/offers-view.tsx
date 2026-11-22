@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowRightLeft, Bike, Info, Pencil, Ticket, User } from "lucide-react";
 import { Card, Checkbox, DESK_COL, ErrorBox, Header, Overlap, PillToggle, PrimaryButton, Radio, Sheet, Skeleton, Stepper, cn, toast } from "@/components/ui";
+import { DEMO_TICKETS } from "@/lib/flags";
 import { OffersSkeleton } from "@/components/skeletons";
 import { DogIcon, LongArrow } from "@/components/icons";
 import { journeyFromSearchParams } from "@/lib/journey-query";
-import { openInSbb } from "@/lib/sbb-deeplink";
+import { openSbb, sbbHandoff } from "@/lib/sbb-deeplink";
 import { cachedConnection, loadConnection, rerouteFromSearchParams, rerouteParams } from "@/lib/connection-key";
 import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
 import { coverageOf, cutConnection } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
 import { endOfServiceDay, formatShortDate, formatTime } from "@/lib/format";
+import { boardingStop, startLabel } from "@/lib/trip-label";
 import { fullName } from "@/lib/mock-data";
 import { usePasses } from "@/lib/travelcards";
 import { actions, useAppState, useSetting } from "@/lib/store";
@@ -116,25 +118,29 @@ export function OffersView() {
   const saver = /saver|spar/i.test(productName);
 
   /**
-   * Tickets are bought in the real SBB app (deep link). The app keeps a demo copy of the ticket,
-   * linked to this journey, so it shows in Plan's Upcoming (opening the trip) and on Tickets.
+   * Tickets are bought in the real SBB app (deep link). It can't tell us whether the traveller
+   * bought it, so this remembers the purchase and asks on return (components/purchase-return.tsx);
+   * a "yes" adds a record of the ticket, linked to this journey, to Tickets and Plan's Upcoming.
+   * In demo mode (lib/flags.ts) the ticket is simply bought here, with a demo code.
    */
   function purchase() {
     if (!conn) return;
     const reroute = rerouteFromSearchParams(new URLSearchParams(raw));
     const tripId = key && key + (reroute ? `~${reroute.key}` : "");
-    const trip = tripId ? { id: tripId, query: query!, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), params: reroute ? rerouteParams(reroute) : undefined } : undefined;
-    if (autoSave && trip && !trips.some((t) => t.id === trip.id)) actions.toggleTrip({ ...trip, index: 0 });
+    const trip = tripId ? { id: tripId, query: query!, departure: conn.from.departure ?? "", arrival: conn.to.arrival ?? "", summary: conn.products.join(" → "), fromStop: boardingStop(conn), params: reroute ? rerouteParams(reroute) : undefined } : undefined;
     // A point-to-point ticket is valid on its day of travel; it shows from now on.
     const now = clock();
     const start = new Date((conn.from.departureTimestamp ?? now / 1000) * 1000);
     // Valid until the end of service (05:00 Zurich time), and never before the train arrives.
     const arrival = (conn.to.arrivalTimestamp ?? 0) * 1000;
     const end = new Date(Math.max(endOfServiceDay(start).getTime(), arrival));
-    actions.addTicket({
+    // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
+    const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;
+    const handoff = sbbHandoff(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
+    const ticket = {
       id: `t-${now}`,
       product: productName,
-      from: stretch?.from ?? fromName ?? "",
+      from: stretch?.from ?? startLabel(fromName ?? "", boardingStop(conn)),
       to: stretch?.to ?? toName ?? "",
       via: via || "direct",
       validFrom: new Date(Math.min(now, start.getTime())).toISOString(),
@@ -142,12 +148,16 @@ export function OffersView() {
       price: total,
       travelClass: effectiveClass as 1 | 2,
       trip,
-    });
-    toast("Ticket added to Upcoming. Finish buying it in the SBB app.");
-    router.push("/plan");
-    // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
-    const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;
-    openInSbb(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
+    };
+    if (DEMO_TICKETS) {
+      actions.addTicket(ticket);
+      if (autoSave && trip && !trips.some((t) => t.id === trip.id)) actions.toggleTrip({ ...trip, index: 0 });
+      toast("Ticket bought (demo). It’s in Tickets and Plan’s Upcoming.");
+      router.push("/tickets");
+      return;
+    }
+    actions.startPurchase({ ticket: { ...ticket, source: "sbb-app" }, trip: autoSave && trip ? { ...trip, index: 0 } : undefined, sbb: handoff, at: now });
+    openSbb(handoff);
   }
 
   return (
@@ -336,9 +346,9 @@ export function OffersView() {
               <Line label={<b className="font-bold">Total</b>} value={<b className="font-bold">CHF {total.toFixed(2)}</b>} />
             </div>
           </Card>
-          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">You pay in the SBB app (or on sbb.ch if it isn&apos;t installed).{" "}
+          <p className="my-3.5 px-[3.5px] text-[11px] text-muted">{DEMO_TICKETS ? "Demo purchase: nothing is charged and the ticket isn’t valid for travel." : "You pay in the SBB app (or on sbb.ch if it isn’t installed)."}{" "}
             {fare.source === "nova" ? "Prices from SBB's NOVA price service (OJP Fare test system)." : "Prices are estimated (≈); the SBB app shows the exact amount."}</p>
-          <PrimaryButton onClick={purchase}>Buy in the SBB app · {fare.source === "estimate" ? "≈ " : ""}CHF {total.toFixed(2)}</PrimaryButton>
+          <PrimaryButton onClick={purchase}>{DEMO_TICKETS ? "Buy" : "Buy in the SBB app"} · {fare.source === "estimate" ? "≈ " : ""}CHF {total.toFixed(2)}</PrimaryButton>
         </Sheet>
       )}
 

@@ -1,3 +1,4 @@
+import { appUrl } from "./app-url";
 /**
  * Thin typed client for Swiss timetable data. All calls go through our proxy at
  * /api/transport/*, which uses the official OJP 2.0 API when OJP_API_KEY is set
@@ -72,7 +73,7 @@ export type Connection = {
   accessWalk?: { minutes: number; metres: number | null; track?: [number, number][] };
   /** Service alerts that touch this connection (OJP only). */
   disruptions?: Disruption[];
-  /** Server-side handle to price this exact trip via /api/transport/fares (OJP only). */
+  /** Signed handle carrying this exact trip, to price it via /api/transport/fares (OJP only). */
   fareRef?: string;
 };
 
@@ -142,7 +143,7 @@ function toQuery(params: Params): string {
 }
 
 async function get<T>(path: string, params: Params, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(`/api/transport/${path}?${toQuery(params)}`, { signal });
+  const res = await fetch(appUrl(`/api/transport/${path}?${toQuery(params)}`), { signal });
   if (!res.ok) throw new Error(`Transport API ${path} failed: ${res.status}`);
   return res.json() as Promise<T>;
 }

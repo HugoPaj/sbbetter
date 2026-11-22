@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { BottomNav, SideNav } from "@/components/bottom-nav";
 import { Toaster } from "@/components/ui";
 import { ServiceWorker } from "@/components/service-worker";
+import { PurchaseReturn } from "@/components/purchase-return";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -105,6 +106,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SideNav />
           {children}
           <BottomNav />
+          <PurchaseReturn />
           <Toaster />
         </div>
         <ServiceWorker />

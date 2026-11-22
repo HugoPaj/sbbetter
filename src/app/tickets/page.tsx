@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import { ChevronRight, History } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ChevronRight, History, Smartphone } from "lucide-react";
 import { Card, Header, InfoLine, ListRow, OutlineButton, Overlap, PrimaryButton, Sheet, cn, toast } from "@/components/ui";
 import { LongArrow, PhoneTicketIcon, QrOffIcon } from "@/components/icons";
 import { FakeQr, TicketSheet } from "@/components/ticket";
-import { EasyRideCard } from "@/components/easyride";
+import { EasyRideCard, useRiding } from "@/components/easyride";
 import { ServiceSheet, TICKET_SERVICES } from "@/components/shop";
 import { USER } from "@/lib/mock-data";
 import { travelcardNames, useCatalog, useTravelcards } from "@/lib/travelcards";
@@ -26,11 +26,67 @@ export default function TicketsPage() {
   const [service, setService] = useState<string | null>(null);
   const { tickets } = useAppState();
   const [page, setPage] = useState(0);
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const onPagerScroll = () => {
+    const el = pagerRef.current;
+    if (el) setPage(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  const goToPage = (i: number) => {
+    const el = pagerRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
   const [open, setOpen] = useState<Ticket | null>(null);
   const [card, setCard] = useState<string | null>(null);
   const [selection] = useTravelcards();
   const cards = travelcardNames(selection, useCatalog());
   const [zoom, setZoom] = useState(false);
+  const riding = useRiding();
+  // Phone: the SwissPass collapses to its red strip on scroll. The strip is sticky and the code
+  // part scrolls up under it (no layout change, so no scroll jumps). As the code part's rounded
+  // bottom passes under the strip, the strip's bottom corners follow that same arc (so the card keeps
+  // one outline), and its shadow and the blur below fade in. Set per frame on the DOM, not in state.
+  const passBar = useRef<HTMLDivElement>(null);
+  const passStrip = useRef<HTMLDivElement>(null);
+  const passShadow = useRef<HTMLDivElement>(null);
+  const passBlur = useRef<HTMLDivElement>(null);
+  const passBody = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let frame = 0;
+    const R = 19; // the card's corner radius
+    const check = () => {
+      frame = 0;
+      const [bar, strip, shadow, blur, body] = [passBar.current, passStrip.current, passShadow.current, passBlur.current, passBody.current];
+      if (!bar || !strip || !shadow || !blur || !body) return;
+      const sticky = getComputedStyle(bar).position === "sticky";
+      // How much of the code part still shows below the strip (0…R: its bottom arc is passing under).
+      const r = sticky ? Math.min(R, Math.max(0, body.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom)) : R;
+      const p = 1 - r / R;
+      if (r >= R) strip.style.clipPath = "";
+      else {
+        const W = strip.offsetWidth;
+        const H = strip.offsetHeight;
+        // The arc's centre, from the strip's top; it meets the strip's bottom edge x0 in from each side.
+        const cy = H + r - R;
+        const x0 = R - Math.sqrt(R * R - (R - r) ** 2);
+        strip.style.clipPath = `path("M0 ${R}A${R} ${R} 0 0 1 ${R} 0H${W - R}A${R} ${R} 0 0 1 ${W} ${R}V${cy}A${R} ${R} 0 0 1 ${W - x0} ${H}H${x0}A${R} ${R} 0 0 1 0 ${cy}Z")`;
+      }
+      shadow.style.filter = p > 0 ? `drop-shadow(0 4px 7px rgb(0 0 0 / ${(0.3 * p).toFixed(3)}))` : "";
+      blur.style.opacity = String(p);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    // Phone: the app scrolls in #app-scroll (layout.tsx), not the window.
+    const scroller = document.getElementById("app-scroll") ?? window;
+    check();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
   // Read the clock only on the client to keep render pure and hydration-safe.
   const now = useSyncExternalStore(subscribeNoop, () => Math.floor(Date.now() / 60000) * 60000, () => 0);
   const valid = tickets.filter((t) => new Date(t.validTo).getTime() >= now);
@@ -41,11 +97,34 @@ export default function TicketsPage() {
       {/* What you show: SwissPass, valid tickets, a running EasyRide ride. Buying starts on Plan. */}
       <Header title="Tickets" extend />
 
-        <Overlap className="lg:mx-auto lg:grid lg:max-w-[1040px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
+        {/* Phone: tall enough to scroll the SwissPass code (≈48 % of the width + padding) fully under its strip, even with few tickets. */}
+        <Overlap className="min-h-[calc(var(--app-h)+min(48vw,207px)+40px)] lg:min-h-0 lg:mx-auto lg:grid lg:max-w-[1040px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
           {/* SwissPass card (desktop: stays in view on the left, tickets on the right) */}
-          <Card className="overflow-hidden lg:sticky lg:top-[88px]">
-            <div className="relative flex justify-between overflow-hidden bg-[#b8242a] px-[15.5px] text-white pt-2 pb-[6.5px]">
-              <DotField className="absolute top-[9px] right-[10px] h-[64px] w-[118px] text-white/80" />
+          {/* Phone: `contents`, so the strip can stick inside the whole page column. */}
+          <div className="contents lg:sticky lg:top-[88px] lg:block lg:overflow-hidden lg:rounded-[19px]">
+            <div
+              ref={passBar}
+              // Sticks exactly where it rests (header + 3.5px: the card overlaps the 27.5px skirt by 24px), so it never shifts.
+              className="sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-20 lg:static"
+            >
+              {/* A copy of the header's red skirt pinned to the strip: at rest it lies exactly on the real one, then it stays. */}
+              <div aria-hidden className="absolute -inset-x-[8.5px] -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
+              {/* Page colour behind the rest of the strip, so what scrolls under it never shows around its rounded corners. */}
+              <div aria-hidden className="absolute -inset-x-[8.5px] top-6 bottom-0 bg-page lg:hidden" />
+              {/* Collapsed, the tickets fade out under the strip through a soft blur (as in the native app), not a hard edge. */}
+              <div
+                ref={passBlur}
+                aria-hidden
+                style={{ opacity: 0 }}
+                className="pointer-events-none absolute -inset-x-[8.5px] top-full h-7 bg-page/40 backdrop-blur-[6px] [mask-image:linear-gradient(to_bottom,black,transparent)] lg:hidden"
+              />
+            {/* The shadow is a filter on a wrapper: the strip's clip-path would cut off a box-shadow. */}
+            <div ref={passShadow} className="relative">
+            <div
+              ref={passStrip}
+              className="relative flex justify-between overflow-hidden rounded-t-[19px] bg-[#b8242a] px-[15.5px] text-white pt-2 pb-[6.5px] lg:rounded-none"
+            >
+              <DotField className="absolute top-[13px] right-[14px] h-[58px] w-[97px] text-white/85" />
               <div className="relative">
                 <p className="text-[16px] leading-[22px] font-bold">
                   {USER.lastName}
@@ -56,13 +135,21 @@ export default function TicketsPage() {
                   {USER.birthDate} {USER.gender}
                 </p>
               </div>
-              <p className="relative mr-[85px] text-[13.5px] font-light">
+              {/* Ends just inside the map's top-left, as on the card. */}
+              <p className="relative mr-[80px] text-[13.5px] font-light">
                 Swiss<b className="font-bold">Pass</b>
               </p>
             </div>
-            <div className="bg-[#2a2a2a] light:bg-white px-[15.5px] pt-[16.5px] pb-[9px]">
-              {page === 0 ? (
-                <div className="flex items-stretch justify-between">
+            </div>
+            </div>
+            <div ref={passBody} className="rounded-b-[19px] bg-[#2a2a2a] light:bg-white pt-[16.5px] pb-[9px] lg:rounded-none">
+              {/* Swipe between the code and the card details (native scroll-snap). */}
+              <div
+                ref={pagerRef}
+                onScroll={onPagerScroll}
+                className="no-scrollbar flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
+              >
+                <div className="flex w-full shrink-0 snap-center snap-always items-stretch justify-between px-[15.5px]">
                   <button aria-label="Enlarge SwissPass code" onClick={() => setZoom(true)} className="w-[48.2%]">
                     <FakeQr seed={USER.email} className="aspect-square w-full rounded-[4.5px]" />
                   </button>
@@ -76,29 +163,30 @@ export default function TicketsPage() {
                     </svg>
                   </div>
                 </div>
-              ) : (
-                <div className="flex aspect-[1/0.482] flex-col justify-center space-y-2 px-1">
+                <div className="flex w-full shrink-0 snap-center snap-always flex-col justify-center space-y-2 px-[19.5px]">
                   <InfoLine label="SwissPass no." value="DEMO-000-000-0" />
                   <InfoLine label="Card holder" value={`${USER.firstName} ${USER.lastName}`} />
                   <InfoLine label="Date of birth" value={USER.birthDate} />
                   <InfoLine label="Card valid until" value="31.12.2030" />
                   <InfoLine label="Travelcards" value={String(cards.length)} />
                 </div>
-              )}
+              </div>
               <div className="mt-[9.5px] flex justify-center" role="tablist" aria-label="SwissPass pages">
                 {[0, 1].map((i) => (
-                  <button key={i} role="tab" aria-selected={page === i} aria-label={i === 0 ? "Code" : "Card details"} onClick={() => setPage(i)} className="-my-2 px-[5px] py-2">
+                  <button key={i} role="tab" aria-selected={page === i} aria-label={i === 0 ? "Code" : "Card details"} onClick={() => goToPage(i)} className="-my-2 px-[5px] py-2">
                     <span className={cn("block size-1.75 rounded-full", page === i ? "bg-fg" : "bg-fg/40")} />
                   </button>
                 ))}
               </div>
             </div>
-          </Card>
+          </div>
 
           <div className="lg:min-w-0">
           <div className="mt-[38.5px] space-y-[8.5px] lg:mt-0">
             <EasyRideCard />
             {valid.length === 0 ? (
+              // A running EasyRide ride is a valid ticket (its card is just above).
+              riding ? null : (
               <div className="rounded-[19px] border border-fg/35 bg-gradient-to-b from-[#1a1a1a] to-[#0c0c0c] light:from-white light:to-[#f6f6f6] px-5 pt-4.25 pb-3 text-center">
                 <PhoneTicketIcon className="mx-auto h-[78px] w-[62px]" />
                 <p className="mt-1.5 text-[14px] font-light tracking-tight text-fg/75">You do not currently have a valid ticket.</p>
@@ -106,6 +194,7 @@ export default function TicketsPage() {
                   <PrimaryButton href="/plan">Find a ticket</PrimaryButton>
                 </div>
               </div>
+              )
             ) : (
               valid.map((t) => <TicketCard key={t.id} ticket={t} valid onOpen={() => setOpen(t)} />)
             )}
@@ -127,7 +216,7 @@ export default function TicketsPage() {
               <ListRow key={s.label} icon={s.icon} label={s.label} chevron onClick={() => setService(s.label)} />
             ))}
           </Card>
-          <div className="h-[calc(92px+var(--home-inset))]" />
+          <div className="h-[calc(112px+var(--home-inset))]" />
           </div>
         </Overlap>
 
@@ -171,22 +260,50 @@ export default function TicketsPage() {
 }
 
 /** Decorative dot field for the SwissPass banner (abstract, original). */
+/**
+ * The SwissPass map: Switzerland as a square grid of dots (from a simplified border, 20 columns),
+ * with a larger cross on a few cities, like the card in the native app.
+ */
+const SWISS_DOTS = [
+  "...........#........",
+  ".......########.....",
+  ".....###########....",
+  "....############....",
+  "....############....",
+  "...################.",
+  "..#################.",
+  ".##################.",
+  ".#############.####.",
+  ".#..#####...##...#..",
+  "....#####...##......",
+  ".....####....#......",
+];
+/** Basel, Zürich, Bern, Lausanne, Geneva, Lugano: [column, row]. */
+const SWISS_CITIES = [
+  [7, 1],
+  [11, 2],
+  [6, 5],
+  [3, 7],
+  [1, 9],
+  [13, 11],
+];
+const isCity = (c: number, r: number) => SWISS_CITIES.some(([x, y]) => x === c && y === r);
+
 function DotField({ className }: { className?: string }) {
-  const dots: { x: number; y: number }[] = [];
-  for (let row = 0; row < 9; row++) {
-    for (let col = 0; col < 15; col++) {
-      // Rough blob: keep dots inside a lumpy ellipse.
-      const dx = (col - 7.5) / 7.5;
-      const dy = (row - 4) / 4.4;
-      const lump = 0.12 * Math.sin(col * 1.7) + 0.1 * Math.cos(row * 2.3 + col);
-      if (dx * dx + dy * dy < 0.82 + lump) dots.push({ x: col * 8 + 4 + (row % 2) * 4, y: row * 8 + 4 });
-    }
-  }
   return (
-    <svg viewBox="0 0 124 72" className={className} fill="currentColor" aria-hidden>
-      {dots.map((d, i) => (
-        <circle key={i} cx={d.x} cy={d.y} r={0.9} />
-      ))}
+    <svg viewBox="0 0 120 72" className={className} fill="currentColor" stroke="currentColor" aria-hidden>
+      {SWISS_DOTS.flatMap((line, r) =>
+        [...line].map((ch, c) => {
+          if (ch !== "#") return null;
+          const x = c * 6 + 3;
+          const y = r * 6 + 3;
+          return isCity(c, r) ? (
+            <path key={`${c}-${r}`} d={`M${x - 2.6} ${y}h5.2M${x} ${y - 2.6}v5.2`} strokeWidth={1.3} />
+          ) : (
+            <circle key={`${c}-${r}`} cx={x} cy={y} r={1.05} stroke="none" />
+          );
+        }),
+      )}
     </svg>
   );
 }
@@ -221,7 +338,16 @@ function TicketCard({ ticket, valid, onOpen }: { ticket: Ticket; valid?: boolean
           {formatTime(ticket.validTo)}
         </p>
       </div>
-      {valid ? <FakeQr seed={ticket.id} className="size-13.5 shrink-0 rounded" /> : <QrOffIcon className="size-6 shrink-0" strokeWidth={1.1} />}
+      {valid && ticket.source === "sbb-app" ? (
+        <span className="flex shrink-0 flex-col items-center gap-0.5 text-[10.5px] font-light text-fg/70">
+          <Smartphone className="size-6" strokeWidth={1.1} />
+          SBB app
+        </span>
+      ) : valid ? (
+        <FakeQr seed={ticket.id} className="size-13.5 shrink-0 rounded" />
+      ) : (
+        <QrOffIcon className="size-6 shrink-0" strokeWidth={1.1} />
+      )}
     </button>
   );
 }

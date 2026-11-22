@@ -38,7 +38,7 @@ export type TravelcardSelection = {
 export type ZonePassMeta = { id: string; network: string; label: string; zones: { id: string; name: string }[] };
 export type Catalog = { zonePasses: ZonePassMeta[]; areaPasses: { id: string; name: string }[] };
 
-type PassFile = { edges: Record<string, string[]> | string[]; stopZone?: Record<string, string>; coords: Record<string, [number, number]> };
+export type PassFile = { edges: Record<string, string[]> | string[]; stopZone?: Record<string, string>; coords: Record<string, [number, number]> };
 
 /** Fetch JSON, failing on HTTP errors (a 404 page isn't data). */
 const getJson = <T,>(url: string): Promise<T> =>
@@ -91,7 +91,7 @@ function nearestStop(coords: PassFile["coords"], lat: number, lon: number): stri
   return best;
 }
 
-function zonePass(meta: ZonePassMeta, zones: string[], file: PassFile): LocalPass {
+export function zonePass(meta: ZonePassMeta, zones: string[], file: PassFile): LocalPass {
   const bought = new Set(zones);
   const edges = file.edges as Record<string, string[]>;
   const inZones = (id: string | null) => !!id && bought.has(file.stopZone?.[id] ?? "");
@@ -108,7 +108,7 @@ function zonePass(meta: ZonePassMeta, zones: string[], file: PassFile): LocalPas
   };
 }
 
-function areaPass(name: string, file: PassFile): LocalPass {
+export function areaPass(name: string, file: PassFile): LocalPass {
   const edges = new Set(file.edges as string[]);
   return {
     name,
@@ -135,7 +135,7 @@ const keyOf = (sel: TravelcardSelection) => JSON.stringify(sel);
 const built = new Map<string, Passes>();
 
 /** National rules only; zone/area passes are added once their data has loaded. */
-function nationalPasses(sel: TravelcardSelection, local: LocalPass[] = []): Passes {
+export function nationalPasses(sel: TravelcardSelection, local: LocalPass[] = []): Passes {
   const anywhere = NATIONAL.find((n) => ANYWHERE.includes(n.id) && sel.national.includes(n.id));
   return { halfFare: sel.national.includes("halfFare"), ga: anywhere ? anywhere.name.replace(/,.*$/, "").replace(" Travelcard", "") : null, nightGa: sel.national.includes("nightGa"), local };
 }

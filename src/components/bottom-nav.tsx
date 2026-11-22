@@ -2,11 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound, Monitor, Moon, Sun } from "lucide-react";
+import { Check, CircleUserRound, Monitor, Moon, Sun } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { PlanIcon, QrIcon } from "./icons";
 import { SbbLogo, cn } from "./ui";
 import { THEME_OPTIONS, setTheme, useTheme, useThemeChoice } from "@/lib/theme";
+import { useSetting } from "@/lib/store";
+
+/** While an EasyRide ride runs, the Tickets tab gets a red tick (as in the native app): the ticket is there. */
+function RideTick() {
+  const riding = useSetting<number>("easyride.since", 0)[0] > 0;
+  if (!riding) return null;
+  return (
+    <span aria-label="EasyRide ticket active" className="absolute -top-1.5 -right-2 flex size-[15px] items-center justify-center rounded-full bg-sbb-red text-white ring-2 ring-(--color-bar)">
+      <Check className="size-[10px]" strokeWidth={3} />
+    </span>
+  );
+}
 
 type Tab = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement> & { strokeWidth?: number }>; match: string[] };
 
@@ -40,6 +52,15 @@ export function BottomNav() {
   const slide = "transition-[left,width] duration-200 ease-out motion-reduce:transition-none";
 
   return (
+    <>
+    {/*
+      Fade to the page colour (black in dark mode, near-white in light) where the page scrolls
+      under the bar. It starts 30px into the bar so the notch pocket behind the active tab fades too.
+    */}
+    <div
+      aria-hidden
+      className="pointer-events-none fixed bottom-[calc(30px+var(--home-inset))] left-1/2 z-[25] h-[80px] w-full max-w-[430px] -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-page)_70%,transparent)_45%,var(--color-page)_85%)] lg:hidden"
+    />
     <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 light:drop-shadow-[0_-1px_8px_rgba(0,0,0,0.12)] lg:hidden">
       <div className="relative h-[calc(60px+var(--home-inset))] overflow-hidden">
         {/* Bar background. With an active tab it is split around a pocket that shows the page behind. */}
@@ -75,7 +96,10 @@ export function BottomNav() {
                   aria-current={isActive ? "page" : undefined}
                   className={cn("flex h-full items-center justify-center transition-colors", isActive ? "text-page" : "text-fg")}
                 >
-                  <Icon className="size-[22px]" strokeWidth={1.25} />
+                  <span className="relative">
+                    <Icon className="size-[22px]" strokeWidth={1.25} />
+                    {t.href === "/tickets" && <RideTick />}
+                  </span>
                 </Link>
               </li>
             );
@@ -83,6 +107,7 @@ export function BottomNav() {
         </ul>
       </div>
     </nav>
+    </>
   );
 }
 

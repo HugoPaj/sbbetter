@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Briefcase, ChevronRight, House, Tickets, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Briefcase, ChevronRight, House, IdCard, Tickets, TriangleAlert } from "lucide-react";
 import { Card, DESK_COL, Header, Overlap, Segmented, Skeleton, cn, toast } from "@/components/ui";
 import { BoardIcon, LongArrow, StopIcon, TargetIcon } from "@/components/icons";
 import { LocationPicker } from "@/components/plan/location-picker";
@@ -16,8 +16,12 @@ import { buildJourney, CURRENT_LOCATION, usePosition, type Endpoint, type Positi
 import { commuteQuery, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { getConnections, nearbyStations, searchLocations, type Connection } from "@/lib/transport";
 import { DelayLabel, delayNote } from "@/components/journey";
+import { loadConnection } from "@/lib/connection-key";
+import { coverageOf, type Passes } from "@/lib/passes";
+import { usePasses } from "@/lib/travelcards";
+import { boardingStop, startLabel } from "@/lib/trip-label";
 import { actions, useAppState, useStoreReady, type Commute, type SavedTrip, type Ticket, type TicketTrip } from "@/lib/store";
-import { haversine, formatShortDate, formatTime, zurichDateTime } from "@/lib/format";
+import { haversine, formatDay, formatTime, zurichDateTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 
 type View = "timetable" | "easyride";
@@ -138,6 +142,7 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
   const { commute, trips, tickets, recentStops, settings } = useAppState();
   const ready = useStoreReady();
   const now = useNow();
+  const passes = usePasses();
   const [setup, setSetup] = useState(false);
   // Waited for here, not inside CommuteCard: one skeleton stays mounted through both waits instead of being swapped for another (which re-runs its fade-in, a flash).
   const at = useWhereAmI(commute, pos);
@@ -173,7 +178,7 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
         <Section title="Upcoming" action={{ label: "Tickets", href: "/tickets" }}>
           <Card className="overflow-hidden">
             {upcoming.map((u) => (
-              <UpcomingRow key={u.ticket?.id ?? u.trip!.id} item={u} status={u.trip ? TRIP_STATUS[String(settings[`sim:${u.trip.id}`])] : undefined} />
+              <UpcomingRow key={u.ticket?.id ?? u.trip!.id} item={u} passes={passes} now={now!} status={u.trip ? TRIP_STATUS[String(settings[`sim:${u.trip.id}`])] : undefined} />
             ))}
             {upcomingAll.length > UPCOMING_MAX && (
               <button onClick={() => setAll((a) => !a)} className="w-full py-2.5 text-center text-[13.5px] font-light tracking-tight text-fg/70 transition-colors hover:bg-fg/5 hover:text-fg">
@@ -207,7 +212,7 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
         </Section>
       )}
 
-      <div className="h-[calc(92px+var(--home-inset))]" />
+      <div className="h-[calc(112px+var(--home-inset))]" />
       {setup && <CommuteSetup initial={commute} onClose={() => setSetup(false)} />}
     </div>
   );
@@ -507,28 +512,97 @@ const TRIP_STATUS: Record<string, string> = {
   cancelled: "Your train is cancelled. Tap to see what to do.",
 };
 
+/** Saved trips leaving within this long (and not yet arrived) show live delays and platforms. */
+const LIVE_AHEAD_MS = 3 * 3600_000;
+
 /**
- * An upcoming ticket or saved trip. With a journey it reads like the trip (departure, arrival,
- * trains) and opens the trip overview; a ticket without one shows when it can be used and opens the
- * overview of the next connection on its route. (The ticket itself, with its code, is on the Tickets page.)
+ * The saved trip as it runs today (delays, platforms), refreshed every minute while it's near.
+ * Undefined while unknown or not near; null when the trip can no longer be found.
  */
-function UpcomingRow({ item: { ticket: k, trip: t, at }, status }: { item: Upcoming; status?: string }) {
+function useLiveTrip(t: TicketTrip | undefined, nowSec: number): Connection | null | undefined {
+  const nowMs = nowSec * 1000;
+  const near = !!t && Date.parse(t.departure) - nowMs < LIVE_AHEAD_MS && Date.parse(t.arrival) > nowMs;
+  const id = near ? t!.id : null;
+  const [live, setLive] = useState<{ id: string; conn: Connection | null } | null>(null);
+  useEffect(() => {
+    if (!id || !t) return;
+    let ctrl: AbortController | null = null;
+    const load = () => {
+      ctrl?.abort();
+      ctrl = new AbortController();
+      // A re-routed trip's id is "<planned key>~<onward key>"; the onward part is in its params.
+      const sp = new URLSearchParams({ key: t.id.split("~")[0], ...t.params });
+      loadConnection(t.query, sp, ctrl.signal)
+        .then((conn) => setLive({ id, conn }))
+        .catch(() => {});
+    };
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => {
+      clearInterval(iv);
+      ctrl?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the trip id covers its query and params.
+  }, [id]);
+  return id && live?.id === id ? live.conn : undefined;
+}
+
+/** Whether the traveller can ride: a ticket, a travelcard that covers the trip, or neither. */
+function TicketState({ ticket, pass }: { ticket: boolean; pass: string | null }) {
+  if (ticket)
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] leading-[14px] font-bold text-ok">
+        <Tickets className="size-3.5" strokeWidth={2} />
+        Ticket
+      </span>
+    );
+  if (pass)
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1 text-[11.5px] leading-[14px] font-bold text-ok">
+        <IdCard className="size-3.5 shrink-0" strokeWidth={2} />
+        <span className="truncate">{pass}</span>
+      </span>
+    );
+  return <span className="shrink-0 text-[11.5px] leading-[14px] font-light text-fg/70">No ticket yet</span>;
+}
+
+/**
+ * An upcoming ticket or saved trip. With a journey it reads like the trip (departure, ticket,
+ * live delay and platform when near) and opens the trip overview; a ticket without one shows when it can
+ * be used and opens the overview of the next connection on its route. (The ticket itself, with its
+ * code, is on the Tickets page.)
+ */
+function UpcomingRow({ item: { ticket: k, trip: t, at }, status, passes, now }: { item: Upcoming; status?: string; passes: Passes; /** Seconds. */ now: number }) {
   const start = new Date(at);
+  const live = useLiveTrip(t, now);
+  // The first ride, for its delay and platform (the trip may start with a walk).
+  const board = live?.sections.find((s) => s.journey)?.departure;
+  const depDelay = board ? delayNote(board, "departure", { past: false }) : null;
+  const platform = board ? (board.prognosis?.platform ?? board.platform) : null;
   // Every item has a ticket, a trip, or both.
-  const from = t?.query.fromName ?? k!.from;
+  const from = t ? startLabel(t.query.fromName, t.fromStop ?? (live ? boardingStop(live) : undefined)) : k!.from;
   const to = t?.query.toName ?? k!.to;
+  const leaveIn = Math.floor((Date.parse(at) / 1000 - now) / 60);
+  const when = t && leaveIn >= 0 && leaveIn < 60 ? (leaveIn === 0 ? "now" : `in ${leaveIn} min`) : formatDay(start, now * 1000);
+  const covered = passes.ga ?? (live && coverageOf(live, passes).parts.length === 0 ? coverageOf(live, passes).pass : null);
   const body = (
     <>
-      <div className="w-[52px] shrink-0 text-center">
-        <p className="text-[16px] leading-tight font-bold">{formatTime(at)}</p>
-        <p className="text-[11.5px] leading-tight font-light text-fg/70">{formatShortDate(start)}</p>
+      <div className="w-[52px] shrink-0 self-start text-center">
+        <p className="text-[16px] leading-[21.3px] font-bold">{formatTime(at)}</p>
+        <p className={cn("mt-0.5 text-[11.5px] leading-[14px] font-light", when.startsWith("in ") || when === "now" ? "font-bold text-fg" : "text-fg/70")}>{when}</p>
+        {depDelay && <DelayLabel note={depDelay} className="text-[11.5px]" />}
       </div>
       <div className="min-w-0 flex-1">
         {to ? <Route from={from} to={to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{from || k!.product}</p>}
-        {t && (
-          <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">
-            Arr. {formatTime(t.arrival)} · {t.summary}
-          </p>
+        {t ? (
+          <>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
+              <TicketState ticket={!!k} pass={covered} />
+              {platform && <span className="shrink-0 text-[11.5px] leading-[14px] font-light whitespace-nowrap text-fg/70">· Pl. {platform}</span>}
+            </div>
+          </>
+        ) : (
+          <p className="mt-0.5 truncate text-[12.5px] leading-[17px] font-light tracking-tight text-fg/70">{k!.product}</p>
         )}
         {status && (
           <p className="mt-1 flex items-center gap-1.5 text-[12.5px] leading-tight text-sbb-red">
