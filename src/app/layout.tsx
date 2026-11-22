@@ -46,6 +46,7 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"
  *    Island phones, 59pt on older Dynamic Island ones, 47pt notch, 20pt home button).
  * Re-runs after load/resize because the first values iOS reports while parsing can be wrong.
  * On every iPhone (browser or installed) it also keeps the document scrolled to the top: see pin().
+ * Installed, it also cancels swipes that would drag the whole document (see the touchmove handler).
  * Add `?vp` to the URL to show the measured values on the device (`?vp=0` hides them again).
  */
 const IOS_PWA_SCRIPT = `(function(){
@@ -67,6 +68,27 @@ if(ios){
   document.addEventListener("focusout",function(){setTimeout(pin,0);setTimeout(pin,350)});
   if(window.visualViewport){visualViewport.addEventListener("resize",pin);visualViewport.addEventListener("scroll",pin)}
   addEventListener("pageshow",pin);
+}
+/* Installed, html/body are stretched to the full screen (--app-h), which is taller than the short
+   layout viewport, so the document has a little scroll range. overflow: hidden does not stop a
+   finger on iOS: a swipe that no inner scroller takes (e.g. on a page too short to scroll) dragged
+   the whole app a few px. Cancel a one-finger swipe unless something under it can scroll that way. */
+if(ios&&app){
+  var sx=0,sy=0,block=null;
+  document.addEventListener("touchstart",function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;block=null},{passive:true});
+  document.addEventListener("touchmove",function(e){
+    if(e.touches.length!==1||!e.cancelable)return;
+    if(block===null){
+      var t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(!dx&&!dy)return;
+      var v=Math.abs(dy)>=Math.abs(dx);block=true;
+      for(var el=e.target;el&&el.nodeType===1&&el!==document.body;el=el.parentElement){
+        if(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||el.isContentEditable){block=false;break}
+        var s=getComputedStyle(el),o=v?s.overflowY:s.overflowX;
+        if((o==="auto"||o==="scroll")&&(v?el.scrollHeight>el.clientHeight:el.scrollWidth>el.clientWidth)){block=false;break}
+      }
+    }
+    if(block)e.preventDefault();
+  },{passive:false});
 }
 if(!(ios&&app)&&!debug)return;
 var info={};
