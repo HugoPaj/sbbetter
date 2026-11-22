@@ -163,7 +163,8 @@ export function OffersView() {
   return (
     <div>
       <Header title="Offers" back extend />
-      <Overlap className={DESK_COL}>
+      {/* The trip stays in view; the choices below scroll under it. */}
+      <Overlap sticky className={cn(DESK_COL, "lg:static")}>
         <Card className="px-[18px] pt-[15px] pb-4">
           <p className="text-[16px] leading-[24px] font-bold">
             <span className="inline-block">
@@ -184,7 +185,9 @@ export function OffersView() {
             </p>
           )}
         </Card>
+      </Overlap>
 
+      <div className={cn("px-[8.5px]", DESK_COL)}>
         <Card className="mt-4.25 flex items-center px-[15px] pt-2 pb-[9.5px]">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[16px] font-bold">{fullName}</p>
@@ -225,7 +228,7 @@ export function OffersView() {
             ]}
           />
         </div>
-      </Overlap>
+      </div>
 
       {/* Placeholder offers only while what there is to offer is itself unknown (see `known`). */}
       {conn !== null && !known && <OffersSkeleton className={DESK_COL} />}

@@ -107,9 +107,25 @@ export function Header({
   );
 }
 
-/** Content wrapper that pulls the first card up over the header skirt (desktop has no skirt: it just sits below the bar). */
-export function Overlap({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("relative z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>{children}</div>;
+/**
+ * Content wrapper that pulls the first card up over the header skirt (desktop has no skirt: it just sits below the bar).
+ *
+ * `sticky` (phone, under a plain `<Header extend />` without children): the card stays exactly where it rests
+ * (header + 3.5px: it overlaps the 27.5px skirt by 24px) and the page scrolls under it, instead of the card
+ * sliding under the bar and getting cut off. It carries its own copy of the skirt, so the red stays put too.
+ * Desktop stays sticky too unless the caller passes `lg:static` (or its own `lg:top-*`).
+ */
+export function Overlap({ children, className, sticky = false }: { children: ReactNode; className?: string; sticky?: boolean }) {
+  if (!sticky) return <div className={cn("relative z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>{children}</div>;
+  return (
+    <div className={cn("sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>
+      {/* At rest this lies exactly on the header's skirt; scrolled, it stays when the real one has gone. */}
+      <div aria-hidden className="absolute inset-x-0 -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
+      {/* Page colour behind the rest, so what scrolls under never shows around the rounded corners. */}
+      <div aria-hidden className="absolute inset-x-0 top-6 bottom-0 bg-page lg:hidden" />
+      <div className="relative">{children}</div>
+    </div>
+  );
 }
 
 /** Red pill segmented control used in headers. */

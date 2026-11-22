@@ -205,15 +205,10 @@ export function ConnectionsView() {
       <Header title="Connections" back="/plan" extend />
       {/* Desktop: the search stays put on the left while the results scroll on the right. */}
       <div className="lg:mx-auto lg:grid lg:max-w-[1160px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
-      {/* Phone: sticks exactly where it rests (header + 3.5px: it overlaps the 27.5px skirt by 24px), so the
-          results scroll under it instead of the card sliding under the header and getting cut off. */}
-      <Overlap className="sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] lg:top-[88px] lg:px-0">
-        {/* A copy of the header's red skirt pinned to the card: at rest it lies exactly on the real one, then it stays. */}
-        <div aria-hidden className="absolute inset-x-0 -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
-        {/* Page colour behind the rest of the card, so results scrolling under it never show around its rounded corners. */}
-        <div aria-hidden className="absolute inset-x-0 top-6 bottom-0 bg-page lg:hidden" />
+      {/* The search stays in view; the results scroll under it. */}
+      <Overlap sticky className="lg:top-[88px] lg:px-0">
         {/* The search card rests on a darker tray that also carries the first date. */}
-        <div className="relative rounded-[19px] bg-[#171717] light:bg-[#e4e4e4]">
+        <div className="rounded-[19px] bg-[#171717] light:bg-[#e4e4e4]">
           <JourneySearchCard query={query} onChange={update} showPrices={showPrices} onShowPricesChange={setShowPrices} />
           {firstDay("flex h-8.5 items-center justify-between pt-0.5 pr-1.75 pl-[15px] lg:hidden")}
         </div>

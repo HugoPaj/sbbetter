@@ -323,9 +323,11 @@ export function DetailView() {
       <Header title="Connection" back extend />
       {/* Desktop: the itinerary is a column on the left; the map fills the rest (see <aside> below). */}
       <div className="contents lg:block lg:w-[520px] lg:px-4">
-      <div className={mapMode ? "relative min-h-0 flex-1" : undefined}>
+      {/* List view: `contents`, so the summary below can stick across the whole page, not just this box. */}
+      <div className={mapMode ? "relative min-h-0 flex-1" : "contents lg:block"}>
       {mapMode && <TripMap connection={conn} origin={origin} fromLabel={fromLabel} accessWalk={walk} topInset={Math.max(0, topInset - 24)} onWalk={setWalkSheet} />}
-      <Overlap>
+      {/* List view: the trip and its buttons stay in view; the itinerary scrolls under them. */}
+      <Overlap sticky={!mapMode} className="lg:static">
         <div ref={summaryRef}>
         <Card className="px-[15px] pt-3.5 pb-4">
           <p className="text-[16px] leading-snug font-bold">
