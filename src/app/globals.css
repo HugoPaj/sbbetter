@@ -605,3 +605,31 @@ textarea,
     animation: fade-in 160ms ease-out;
   }
 }
+
+/*
+ * Blur under a pinned card (Overlap `blur`), shaped like the card: a rounded halo that follows its bottom
+ * corners and rises up the side gutters, so what scrolls under softens around the card instead of meeting
+ * a straight edge across the screen. Box: from 43px above the card's bottom edge to 32.5px below it, plus
+ * `--tail` (content hanging below the card, held at full blur). Corner arcs are centred on the card's own
+ * corner centres (8.5px gutter + 19px radius, 19px up from its bottom, moved down by the tail): solid out to
+ * 27.5px (the screen edge), then fading over 24px.
+ */
+.card-halo-mask {
+  --halo: #000 27.5px, transparent 51.5px;
+  mask-image:
+    linear-gradient(#000, #000),
+    linear-gradient(#000 calc(var(--tail, 0px) + 51.5px), transparent calc(var(--tail, 0px) + 75.5px)),
+    radial-gradient(circle at 100% 0, var(--halo)),
+    radial-gradient(circle at 0 0, var(--halo));
+  mask-size:
+    100% calc(var(--tail, 0px) + 24px),
+    calc(100% - 55px) calc(var(--tail, 0px) + 75.5px),
+    27.5px 51.5px,
+    27.5px 51.5px;
+  mask-position:
+    0 0,
+    50% 0,
+    0 calc(var(--tail, 0px) + 24px),
+    100% calc(var(--tail, 0px) + 24px);
+  mask-repeat: no-repeat;
+}

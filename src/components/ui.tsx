@@ -169,7 +169,14 @@ export function Overlap({
       {/* At rest this lies exactly on the header's skirt; scrolled, it stays when the real one has gone. */}
       <div aria-hidden className="absolute inset-x-0 -top-[5.5px] h-[29.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
       {/* Page colour behind the rest, so what scrolls under never shows around the rounded corners. */}
-      <div aria-hidden className="absolute inset-x-0 top-6 bottom-(--tail) bg-page lg:hidden" />
+      {/* With `blur`, it fades out just above the card's bottom edge, so the blur below can wrap up around the corners. */}
+      <div
+        aria-hidden
+        className={cn(
+          "absolute inset-x-0 top-6 bottom-(--tail) bg-page lg:hidden",
+          blur && "[mask-image:linear-gradient(to_bottom,#000_calc(100%-40px),transparent_calc(100%-8px))]",
+        )}
+      />
       {gap && (
         <>
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-1.25 bg-page lg:hidden" />
@@ -185,7 +192,7 @@ export function Overlap({
         <div
           ref={fadeRef}
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-[calc(100%-var(--tail))] h-[calc(var(--tail)+28px)] bg-page/40 opacity-0 backdrop-blur-[6px] [mask-image:linear-gradient(to_bottom,black_var(--tail),transparent)] lg:hidden"
+          className="card-halo-mask pointer-events-none absolute inset-x-0 top-[calc(100%-var(--tail)-43px)] h-[calc(var(--tail)+75.5px)] bg-page/40 opacity-0 backdrop-blur-[6px] lg:hidden"
         />
       )}
       {fade && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-page from-50% to-transparent lg:hidden" />}
