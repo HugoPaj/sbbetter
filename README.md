@@ -1,8 +1,116 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# SBB Travelers
+# SBBetter
 
-Hackathon prototype: a mobile-first web replica of the SBB Mobile app (Next.js 16 + Tailwind v4), used as a base to build new features on top of.
+**Turn disruption data into the traveller's best next move.** Built at **LauzHack 2026** for the SBB challenge
+*"Assist customers in case of disruption"*.
+
+When a line breaks, SBB publishes messages like *"Limited train service between Annemasse and Genève … Lines RE33,
+RL1, RL3, RL4 and TERL2 are affected. Allow for delays and cancellations."* That is accurate, but it doesn't answer
+the traveller's real question: **what should I do now, and how do I still get to Geneva?** Staff on the platform can,
+but SBB can't put people at every affected station.
+
+SBBetter is a mobile-first web app (installable as a PWA) shaped like SBB Mobile. On every journey it answers that
+question with **one sentence and one connection**, and it gets that answer from past disruptions instead of waiting
+for someone to write it.
+
+<p align="center">
+  <img src="docs/screenshots/demo-line-closed.gif" width="300" alt="Demo: a connection from Biel/Bienne to La Chaux-de-Fonds shows a Plan B via Neuchâtel; after simulating a line closure, the app recommends that detour as a live connection and lists what usually happens next.">
+  <br><sub>Biel/Bienne → La Chaux-de-Fonds: Plan B on a normal day, then a simulated line closure.</sub>
+</p>
+
+## The challenge, and how we answer it
+
+| SBB asked for a solution that… | What SBBetter does |
+| --- | --- |
+| understands **where the traveller wants to go** | Works from the traveller's own journey: a connection they searched, a saved trip, a ticket, or their daily commute. Each of these is a real timetable connection (OJP 2.0). |
+| understands **how the disruption affects the journey** | Matches the disruption to the legs actually ridden: a late train, a change that no longer works, a cancelled train, or a closed stretch the train runs over (by its stops, and by its path for trains that don't stop there). |
+| says **what the traveller should do next** | A **verdict card**: *"Take the RE 2 via Neuchâtel at 07:41, arriving 08:43 (17 min later)"*. The connection is searched live, checked not to run over the closed stretch, and shown in the timeline so you can open or buy it. |
+| **works with incomplete information** | At minute zero there is usually no advice yet. **Line memory** fills the gap: the detour staff recommended the last times *this* stretch closed, and how long it usually took them to say it. A **duration forecast** gives "likely over around …" when SBB has no estimate yet, or shows how far its first estimates tend to overrun. |
+| **recognises relevant updates and adapts** | **Disruption replay**: three real September 2026 disruptions play on today's live trains, update by update, as the timetable (VIA), the public ticker and the staff ticker published them. At each update the alert, the end forecast and the one-sentence advice are rebuilt from what was known by then. Live OJP situations work the same way. |
+| **informs travellers at the right moment** | In a replay, a notification appears only when an update changes what *this* traveller should do; advice for other lines sends nothing. **Commute alerts** do the same for real: in the hour before each usual departure the server checks the train and sends one push notification when something is wrong (line closed → Plan B, change won't work, late, likely late), and again only when the news changes. |
+| **uses the publication timestamps** | They order every replay step, measure how late advice came (line memory), and give the forecast how long a disruption has already lasted. |
+
+### What we built from the data
+
+The hackathon export holds the **public live ticker** (incidents, their version history, messages, since 2024), the
+**internal KULT live ticker** (staff messages for September 2026) and **timetable disruption information** (the VIA
+event log, `Ereignismeldungen`). Three offline scripts (Python, standard library only) turn it into small JSON files
+the app ships with. The export itself stays out of git (see *The SBB export* below).
+
+- **Disruption replays**: `scripts/build-replays.py` → `public/replays.json`. Uses all three sources. Three real
+  September 2026 disruptions, each as a timeline of updates: when VIA put it in the timetable and which lines and stops
+  it closed, every version of the public ticker incident (with SBB's end estimate), the control centre's messages, and
+  a few staff messages translated into English. VIA's closed stops decide which live trains are hit.
+  *Example:* Renens – Morges, 17 Sep. SBB's end estimate moved 18:30 → 20:30 → 21:00 → 23:59, and staff ordered buses
+  76 min before the public heard of them. A Lausanne → Genève traveller gets 6 messages over 6.5 hours.
+- **Line memory**: `scripts/build-line-memory.py` → `public/line-memory.json`.
+  550 incidents on 159 stretches since March 2024. For each stretch: every past disruption with cause and duration,
+  the detours staff recommended ("via …") with a quote and how late that advice came, replacement buses, and whether
+  tickets were also valid on another route. For each cause: the usual order of events (buses announced, detour advice,
+  specialists on site, new forecast), as minutes after the start.
+  *Example:* when Biel/Bienne – Reuchenette-Péry closed, staff wrote "travel via Neuchâtel" in four of six
+  incidents, on average more than an hour in. SBBetter offers that detour at minute zero, as a real connection.
+- **Disruption forecast**: `scripts/build-disruption-model.py` → `src/lib/disruption-model.json`.
+  For each cause: past durations, how far SBB's first announced estimate overran, how often replacement buses came and
+  when. Forecasts are quantiles of past cases that had already lasted as long as the current one. It is fitted only on
+  data before September 2026, so in a replay it makes a real prediction. Backtest on the 13 September disruptions with
+  an SBB estimate: SBB's first estimate held in 3, our "80 % sure" time in 8. The app shows this under an expanded
+  service alert and in the replay.
+
+<table>
+<tr><td align="center" valign="top" width="33%"><img src="docs/screenshots/detail-plan-b.png" width="240" alt="Connection with the line 'If this line closes: Plan B via Neuchâtel'"><br><sub>Normal day: one muted line with the Plan B</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/line-memory-sheet.png" width="240" alt="Line memory sheet: Plan B searched live, disrupted 6 times since March 2024, usually over within 2 h 45 min, buses after about 45 min"><br><sub>Line memory: the Plan B searched live, and the stretch's history</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/line-closed-what-next.png" width="240" alt="Line closed alert expanded: what usually happens next, with clock times, and when staff last advised the detour"><br><sub>Line closed: what usually happens next, and when</sub></td></tr>
+</table>
+
+In addition, a **delay forecast** for each leg ("likely 6 min late") comes from a LightGBM model trained on SBB actual
+times (Ist-Daten, ~6M arrivals, Nov 2025 to Sep 2026) together with the weather forecast. It is exported to
+`public/delay-model.json` and evaluated in the browser (`src/lib/delay-model.ts`); the training code is not in this repo.
+The export carries five models and the app shows one (the 80th percentile): run `node scripts/trim-delay-model.mjs`
+after a new export to drop the rest (4.6 MB -> 1.1 MB).
+
+<table>
+<tr><td align="center" valign="top" width="33%"><img src="docs/screenshots/connections-delay-forecast.png" width="240" alt="Connections Zürich HB to Lugano with delay forecasts Est. +6 and Est. +2, prices and cheaper departures nearby"><br><sub>Delay forecasts (“Est. +6”) next to arrival times, live prices, cheaper departures nearby</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/detail-delay-forecast.png" width="240" alt="Connection detail with Est. +6 under the arrival in Lugano"><br><sub>The forecast sits under the time it belongs to; live delays replace it</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/live-service-alert.png" width="240" alt="Connection with a real live service alert: Information on IR 26 and IR 46 from Erstfeld"><br><sub>A real service alert from OJP, attached to the connection it affects</sub></td></tr>
+</table>
+
+### Demo walkthrough
+
+The screenshots are from the running app with live OJP data, searching trains for Monday 23.11.2026.
+
+**Main demo: replay a real disruption.** Profile → Demo → **Replay a real disruption** and pick one (or open any URL
+with `?replay=renens-morges`). The app searches the journey now and opens the first train the disruption hits. Step
+through the updates with the dock above the tab bar (**Next** / back, or **→ / ←**); tap it to see what the traveller
+is told, "When will it be over?" (our forecast vs SBB's vs what happened), and every update with its source. Details
+in *Replaying a real disruption* below.
+
+<table>
+<tr><td align="center" valign="top" width="33%"><img src="docs/screenshots/replay-start.png" width="240" alt="Replay of Renens – Morges on a live Lausanne to Genève RE 33: Your RE 33 can't get through, line closed, likely over around 12:52, replay dock at update 1 of 26"><br><sub>Minute 13: the timetable (VIA) closes the line; the app already says this train can't get through</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/replay-notification.png" width="240" alt="Notification during the replay: Replacement bus Morges – Renens VD, take your RE 33 as far as it goes, then the bus"><br><sub>Update 17: buses are published, so a notification tells this traveller what changed</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/replay-sheet.png" width="240" alt="Replay sheet: when will it be over (this app, SBB, in hindsight), the backtest, and every update with its source"><br><sub>The sheet: our forecast vs SBB vs what happened, and every update with its source</sub></td></tr>
+</table>
+
+**Then, on any journey:**
+
+1. **Plan** → search *Biel/Bienne → La Chaux-de-Fonds* (or set it up as your commute) and open the 07:47 RE 4.
+2. On a normal day, a muted line under a train says *"If this line closes: Plan B via …"*. Tap it to see that Plan B
+   searched live, plus the stretch's history.
+3. **⋮ → "Simulate a disruption"** and choose *Small delay*, *Missed connection*, *Cancelled train* or *Line closed*.
+   The verdict card tells you what to do, the timeline shows what happens to each leg, and the recommended
+   alternative is a real connection. *Line closed* uses a stretch this route really runs over, with its real cause,
+   its forecast and the detour from its own history.
+4. **Profile → Notifications → Commuter route**: set up a commute, then "Check my commute now" to get the push
+   notification (production build, VAPID keys needed; see *Commute alerts* below).
+5. **Offers** → Buy. In hackathon demo mode this adds a demo ticket with a fake QR code.
+
+<table>
+<tr><td align="center" valign="top" width="33%"><img src="docs/screenshots/plan-commute.png" width="240" alt="Plan home with the commute card: Plan B ready via Neuchâtel"><br><sub>Plan: the commute, with its Plan B ready</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/line-closed-verdict.png" width="240" alt="Line closed verdict: take the R 13 at 07:51 to Neuchâtel and the IR 66, arrive 08:57, 29 min later"><br><sub>Line closed: take this instead, a real connection</sub></td><td align="center" valign="top" width="33%"><img src="docs/screenshots/missed-connection.png" width="240" alt="Missed connection in Arth-Goldau: the first train is 12 min late, take the 19:18 EC instead, 30 min later"><br><sub>Missed connection: the change in Arth-Goldau won't work</sub></td></tr>
+</table>
+
+The disruptions in step 3 are simulated, because the live feed can't produce one on demand; the replay uses real ones.
+Everything they lead to (the alternative connection, the history, the forecast) is real.
+
+### Also in the app
+
+Live NOVA prices (OJP Fare) and "leave 20 min later and save CHF 12" suggestions, travelcard coverage (GA, Half Fare,
+zone and area passes, Night GA hours) with tickets for the uncovered stretch, a departure board and maps (MapLibre),
+an EasyRide-style flow, and tickets that open offline.
 
 ## Run
 
@@ -25,6 +133,7 @@ pnpm test         # unit tests (Vitest); pnpm test:watch while working
 | Prices / offers | **Live** NOVA prices (cheapest ticket, e.g. Supersaver, full fare or Half Fare) via the OJP Fare API when `OJP_FARE_API_KEY` is set — `src/lib/server/ojp-fare.ts`, `src/lib/fares.ts`. Otherwise a **mock** estimate by distance — `src/lib/pricing.ts`. Class upgrades and City add-ons are always modelled |
 | User, travelcards, favourites | **Mock** — `src/lib/mock-data.ts` |
 | Disruption verdict card | **Simulated** disruption (Connection → ⋮ → "Simulate a disruption"), **live** recommended alternative — `src/lib/disruption.ts` |
+| Disruption replay | **Real** September 2026 disruptions from the SBB export (timetable/VIA, public ticker, internal KULT ticker), update by update, laid over **live** trains — `public/replays.json`, `src/lib/replay.ts`. See "Replaying a real disruption" below |
 | Line memory | **Real history** from the SBB hackathon export: every disruption of a stretch since March 2024, the detour staff recommended, the usual order of events — `public/line-memory.json`, `src/lib/line-memory.ts`. The way round is a **live** connection. See "Line memory" below |
 | Purchased tickets, saved trips | `localStorage` — `src/lib/store.ts` (Profile → "Reset demo data") |
 | Commute alerts | **Real** web push before each commute (Profile → Notifications → Commuter route). Other notification switches are demo only. See "Commute alerts" below |
@@ -57,7 +166,8 @@ Journey state lives in the URL (`src/lib/journey-query.ts`), so every screen is 
 easy to get subtly wrong: OJP parsing, fare refs and NOVA price parsing, travelcard coverage (Night GA
 hours, zone and area passes from `public/passes/`), connection keys and re-routes, the disruption
 forecast, line memory (against the real `public/line-memory.json`), the connection timeline and the
-request cache. Test builders for connections are in `src/test/factories.ts`.
+request cache, and the replay engine (which trains each real disruption hits, and the messages a traveller gets,
+against the real `public/replays.json`). Test builders for connections are in `src/test/factories.ts`.
 
 The OJP parsing tests read real responses saved in `src/lib/server/__fixtures__/`. When OJP may have
 changed its format, capture fresh ones and run the tests:
@@ -99,6 +209,65 @@ class. Gotchas:
 - It is an integration test system that prices only future trips, and only within Switzerland.
 
 Note: in the opendata shape `coordinate.x` is **latitude** and `y` is **longitude**.
+
+## The SBB export (local only)
+
+The build scripts below read the SBB LauzHack export (`Daten`, from the hackathon Discord). It is internal
+SBB data, with staff names and phone numbers in the KULT log, so it is **not in git**: keep it at
+`data/Daten/` (gitignored), which the scripts read by default, or pass another path. The app itself only
+needs the JSON files they write, which are committed.
+
+```
+data/Daten/extern-liveticker/   incident, incident_audit, message, message_audit, reason (CSV)
+data/Daten/intern-liveticker/   KULT: Ereignisfälle, messages, log (CSV)
+data/Daten/Ereignismeldungen/   Ereignismeldungen Via.xlsx
+```
+
+## Replaying a real disruption
+
+The demo for the SBB challenge. Three real disruptions from September 2026 play on today's trains, update
+by update, as SBB's three sources published them:
+
+| Replay | Follows | What it shows |
+| --- | --- | --- |
+| `renens-morges` (17 Sep, power failure) | Lausanne → Genève | No way round by train. SBB's end estimate moved 18:30 → 20:30 → 21:00 → 23:59; staff ordered buses 76 min before the public heard of them |
+| `puidoux-vauderens` (25 Sep, fire) | Lausanne → Bern | Line memory names "Plan B via Biel/Bienne" at minute 4; SBB's ticker says the same at minute 28 |
+| `wadenswil-pfaffikon` (10 Sep, overhead line) | Zürich HB → Chur | "Travel via St. Gallen", then the advice withdrawn, then one track open again |
+
+**Running it:**
+
+- Profile → Demo → **Replay a real disruption**, or a connection's ⋮ → "Simulate a disruption" → "Replay a
+  real disruption", or open any URL with `?replay=renens-morges` (`&step=5` to jump in). The app searches
+  the journey now and opens the first train the disruption hits.
+- A dock above the tab bar steps through the updates: **Next** / back, or the **→ / ←** keys on a laptop.
+  Tap it for the sheet: what the traveller is told, "When will it be over?" (our forecast, SBB's, and in
+  hindsight), and every update so far with its source (timetable, public ticker, staff only) and whether
+  it changed anything for this trip.
+- When a step changes what the traveller should do, a notification slides in (the "right moment"). Updates
+  that don't concern the trip (advice for Lausanne – Neuchâtel when going to Genève) send nothing.
+- Stop it from the sheet, or with "Reset demo data".
+
+**How it works:** the update shown happens "now"; the start and every clock time move by the same
+amount. The disruption, as it stood at that update, becomes an ordinary service alert on each live
+connection that runs over the closed stretch (`withReplay`). The match uses the closed stops from VIA and
+the ticker text, and the geometry of the train's stops, so an IC that runs through Renens – Morges without
+stopping counts and Lausanne – Yverdon does not. The alert, the "likely over" forecast and line memory's
+Plan B then work exactly as for a live disruption. On top, `nextMove` gives one sentence built only from
+what was known by then: SBB's detour when the advice line concerns this journey (searched as a real
+connection), the replacement bus, buses or first trains that only the control centre knew about yet, or
+"can't get through" with SBB's estimate.
+
+The end forecast is fitted on data before September 2026, so in a replay it is a real prediction. Tested on
+the 13 September disruptions with an SBB estimate: SBB's first estimate held in 3, our "80 % sure" time in 8
+(shown in the app under an expanded service alert).
+
+```bash
+python3 scripts/build-replays.py [path/to/Daten]   # → public/replays.json (~65 KB)
+```
+
+The script reads all three sources: the VIA event log (`Ereignismeldungen`), the public ticker's incident
+and message history, and the KULT messages. Which incidents, which journey, and the picked staff messages
+with their English translations are set at the top of the script.
 
 ## Commute alerts
 
@@ -150,14 +319,14 @@ before: the service worker saves it with its scripts, styles and travelcard data
 and refreshes that copy while online (`public/sw.js`). The tickets themselves are in `localStorage`.
 On a weak signal a saved page is shown after 3.5 s instead of waiting for the network.
 
-## Line memory
+## Line memory (details)
 
 Disruptions repeat, and so does the advice: when Biel/Bienne – Reuchenette-Péry broke, staff wrote
 "travel via Neuchâtel" four times out of six, on average over an hour in. Line memory gives that
 advice at minute zero.
 
 ```bash
-python3 scripts/build-line-memory.py path/to/Daten   # → public/line-memory.json (~100 KB)
+python3 scripts/build-line-memory.py [path/to/Daten]   # → public/line-memory.json (~100 KB)
 ```
 
 The script reads the hackathon export (public live ticker incidents and staff messages, the control
@@ -181,3 +350,7 @@ It never gets a row of its own; it sits where it applies:
 A connection is matched to a stretch by its stops, and for trains that run through without stopping
 by the path travelled (OJP leg projection). Without OJP only stops count, so fast trains match less.
 A detour is only offered when the connection found does not run over the closed stretch after all.
+
+## Credits
+
+Built at LauzHack 2026 for the SBB challenge "Reimagining travel during disruptions". Data: the SBB hackathon export (public live ticker, internal KULT live ticker, VIA event log), [OJP 2.0](https://opentransportdata.swiss) and [transport.opendata.ch](https://transport.opendata.ch). Not an official SBB product.
