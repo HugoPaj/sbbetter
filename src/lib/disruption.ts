@@ -2,7 +2,7 @@ import type { JourneyQuery } from "./journey-query";
 import { toConnectionsRequest } from "./journey-query";
 import { queryForConnection } from "./connection-key";
 import { formatTime, zurichDateTime } from "./format";
-import { causeLabel, findPlanB, loadLineMemory, stretchName, stretchesOn, timesWord, type Closure } from "./line-memory";
+import { causeLabel, findPlanB, loadLineMemory, normName, stretchName, stretchesOn, timesWord, type Closure } from "./line-memory";
 import { getConnections, type Connection, type Section } from "./transport";
 
 /**
@@ -159,12 +159,16 @@ async function closed(conn: Connection, query: JourneyQuery, firstRide: number, 
   const hit = hits.find((h) => h.stretch.detours.length) ?? hits[0];
   const start = new Date(Date.now() - CLOSED_FOR * 60000).toISOString();
   if (!hit) {
+    const way = await wayAround(queryForConnection(query, conn), conn, conn.sections[firstRide], signal);
     return {
       tone: "act",
       headline: "The line ahead is closed",
-      detail: "This stretch has no history of disruptions yet, so there is no known way round. Please check other connections.",
+      detail: way
+        ? `This stretch has no history of disruptions yet. Take the ${boarding(way.connection)} instead.`
+        : "This stretch has no history of disruptions yet, and we found no other connection. Please ask station staff.",
       why: "Trains cannot run on a part of your route.",
       notes: { [firstRide]: { kind: "closed" } },
+      alternative: way,
       closure: { stretch: null, cause: "ALL", start, simulated: true },
     };
   }
@@ -177,14 +181,57 @@ async function closed(conn: Connection, query: JourneyQuery, firstRide: number, 
     ? { ...query, from: leg.departure.station.id ?? leg.departure.station.name ?? query.from, fromName: leg.departure.station.name ?? query.fromName, ...zurichDateTime(new Date((leg.departure.departureTimestamp ?? 0) * 1000)), isArrivalTime: false, walkMinutes: undefined, via: undefined, viaName: undefined }
     : queryForConnection(query, conn);
   const planB = await findPlanB(from, conn.to.arrivalTimestamp ?? 0, stretch, signal);
+  // No advised detour works: any other real connection that keeps off the closed leg.
+  const way = planB ? undefined : await wayAround(from, conn, leg, signal);
   const where = stretch.ends.length > 1 ? `between ${stretch.ends[0].name} and ${stretch.ends[1].name}` : `at ${stretch.ends[0].name}`;
   return {
     tone: "act",
     headline: `The line is closed ${where}`,
-    detail: planB ? `Go via ${planB.detour.via}: take the ${boarding(planB.connection)}.` : "No way round is known for this stretch. Please check other connections.",
+    detail: planB
+      ? `Go via ${planB.detour.via}: take the ${boarding(planB.connection)}.`
+      : way
+        ? `Take the ${boarding(way.connection)} instead.`
+        : "We found no way round this stretch. Please ask station staff.",
     why: `${causeLabel(memory, cause)}. ${stretchName(stretch)} has been disrupted ${timesWord(stretch.n)} before.`,
     notes: { [at]: { kind: "closed" } },
-    alternative: planB ? { query: planB.query, connection: planB.connection, lateMinutes: Math.max(0, planB.extraMinutes), rejoin: rejoin ? { at: at - 1, late: 0 } : undefined } : undefined,
+    alternative: planB
+      ? { query: planB.query, connection: planB.connection, lateMinutes: Math.max(0, planB.extraMinutes), rejoin: rejoin ? { at: at - 1, late: 0 } : undefined }
+      : way && { ...way, rejoin: rejoin ? { at: at - 1, late: 0 } : undefined },
     closure: { stretch: stretch.key, cause, start, simulated: true },
   };
+}
+
+/** Local transport: a closed metro, tram or bus line doesn't stop the other lines between the same stops. */
+const LOCAL = new Set(["B", "BUS", "NFB", "EV", "T", "TRAM", "NFT", "M", "BAT", "FAE", "BAV"]);
+
+/**
+ * Does this ride cover part of the closed leg? Its own line between any two of the leg's
+ * stops; for a railway, any train between them (they share the track).
+ */
+export function ridesClosed(s: Section, closed: Section): boolean {
+  if (!s.journey || !closed.journey) return false;
+  const rail = !LOCAL.has(closed.journey.category.toUpperCase()) && !LOCAL.has(s.journey.category.toUpperCase());
+  if (lineOf(s) !== lineOf(closed) && !rail) return false;
+  const key = (c: { station: { id: string | null; name: string | null } }) => c.station.id ?? normName(c.station.name ?? "");
+  const stops = new Set([closed.departure, ...closed.journey.passList, closed.arrival].map(key));
+  return new Set([s.departure, ...s.journey.passList, s.arrival].map(key).filter((k) => stops.has(k))).size >= 2;
+}
+
+/**
+ * No known detour: the first real connection from `from` that keeps off the closed leg,
+ * on another line or on foot. Fastest arrival among the next few departures.
+ */
+async function wayAround(from: JourneyQuery, conn: Connection, closed: Section, signal?: AbortSignal): Promise<Verdict["alternative"] | undefined> {
+  const q: JourneyQuery = { ...from, isArrivalTime: false };
+  const list = await getConnections({ ...toConnectionsRequest(q), limit: 6 }, signal).catch((e: Error) => {
+    if (e.name === "AbortError") throw e;
+    return [] as Connection[];
+  });
+  // Not one that has left before the traveller gets there (a minute's grace, plus any walk to the first stop).
+  const earliest = (closed.departure.departureTimestamp ?? 0) - 60 - (conn.accessWalk?.minutes ?? 0) * 60;
+  const ok = list
+    .filter((c) => (c.from.departureTimestamp ?? 0) >= earliest && !c.sections.some((s) => ridesClosed(s, closed)))
+    .sort((a, b) => (a.to.arrivalTimestamp ?? 0) - (b.to.arrivalTimestamp ?? 0));
+  const best = ok[0];
+  return best && { query: queryForConnection(q, best), connection: best, lateMinutes: lateBy(best, conn) };
 }
