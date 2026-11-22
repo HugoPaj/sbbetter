@@ -418,12 +418,14 @@ export function DetailView() {
                       more={verdict.closure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={verdict.closure} offeredVia={verdict.alternative?.query.viaName} />}
                     />
                   )}
-                  {!verdict && !!conn.disruptions?.length && (
+                  {/* Held while a verdict is being worked out: it may replace the Plan B with "Take instead",
+                      and showing both one after the other flashes twice. */}
+                  {!verdict && !checking && !!conn.disruptions?.length && (
                     <DisruptionNotices
                       disruptions={conn.disruptions}
                       // A verdict (simulated or replayed) already offers the way round in the timeline.
-                      planB={!verdict && liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
-                      details={!verdict && liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      planB={liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      details={liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
                     />
                   )}
                   {pass && <PassNotice pass={pass} pricing={!fare} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
