@@ -122,6 +122,7 @@ export function Overlap({
   sticky = false,
   fade = false,
   gap = false,
+  blur = false,
 }: {
   children: ReactNode;
   className?: string;
@@ -130,9 +131,11 @@ export function Overlap({
   fade?: boolean;
   /** Sticky only: a thin solid page-coloured strip under the card (the gap the content keeps at rest), then, once scrolled, a fade like the one above the bottom nav, so what scrolls up fades out instead of sliding visibly under the card's rounded corners. */
   gap?: boolean;
+  /** Sticky only: once scrolled, what passes under the card softens through a short blur (as under the Tickets strip) instead of butting into its edge. */
+  blur?: boolean;
 }) {
   const fadeRef = useRef<HTMLDivElement>(null);
-  // The gap's fade only shows once the page scrolls: at rest it would dim the top of the first result.
+  // The gap's fade and the blur only show once the page scrolls: at rest they would dim the top of what follows.
   useEffect(() => {
     const el = fadeRef.current;
     if (!el) return;
@@ -153,12 +156,12 @@ export function Overlap({
       cancelAnimationFrame(frame);
       scroller.removeEventListener("scroll", onScroll);
     };
-  }, [gap]);
+  }, [gap, blur]);
   if (!sticky) return <div className={cn("relative z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>{children}</div>;
   return (
     <div className={cn("sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>
       {/* At rest this lies exactly on the header's skirt; scrolled, it stays when the real one has gone. */}
-      <div aria-hidden className="absolute inset-x-0 -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
+      <div aria-hidden className="absolute inset-x-0 -top-[5.5px] h-[29.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
       {/* Page colour behind the rest, so what scrolls under never shows around the rounded corners. */}
       <div aria-hidden className="absolute inset-x-0 top-6 bottom-0 bg-page lg:hidden" />
       {gap && (
@@ -171,6 +174,13 @@ export function Overlap({
             className="pointer-events-none absolute inset-x-0 top-[calc(100%+5px)] h-5 bg-[linear-gradient(to_top,transparent,color-mix(in_srgb,var(--color-page)_70%,transparent)_45%,var(--color-page)_85%)] opacity-0 lg:hidden"
           />
         </>
+      )}
+      {blur && (
+        <div
+          ref={fadeRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-full h-7 bg-page/40 opacity-0 backdrop-blur-[6px] [mask-image:linear-gradient(to_bottom,black,transparent)] lg:hidden"
+        />
       )}
       {fade && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-page from-50% to-transparent lg:hidden" />}
       <div className="relative">{children}</div>

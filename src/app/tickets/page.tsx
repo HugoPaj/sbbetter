@@ -70,7 +70,8 @@ export default function TicketsPage() {
         const x0 = R - Math.sqrt(R * R - (R - r) ** 2);
         strip.style.clipPath = `path("M0 ${R}A${R} ${R} 0 0 1 ${R} 0H${W - R}A${R} ${R} 0 0 1 ${W} ${R}V${cy}A${R} ${R} 0 0 1 ${W - x0} ${H}H${x0}A${R} ${R} 0 0 1 0 ${cy}Z")`;
       }
-      shadow.style.filter = p > 0 ? `drop-shadow(0 4px 7px rgb(0 0 0 / ${(0.3 * p).toFixed(3)}))` : "";
+      // Light mode only (class on the wrapper): on the dark page a black shadow just smudges the card scrolling under.
+      shadow.style.setProperty("--pass-shadow", (0.3 * p).toFixed(3));
       blur.style.opacity = String(p);
     };
     const onScroll = () => {
@@ -108,7 +109,7 @@ export default function TicketsPage() {
               className="sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-20 lg:static"
             >
               {/* A copy of the header's red skirt pinned to the strip: at rest it lies exactly on the real one, then it stays. */}
-              <div aria-hidden className="absolute -inset-x-[8.5px] -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
+              <div aria-hidden className="absolute -inset-x-[8.5px] -top-[5.5px] h-[29.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
               {/* Page colour behind the rest of the strip, so what scrolls under it never shows around its rounded corners. */}
               <div aria-hidden className="absolute -inset-x-[8.5px] top-6 bottom-0 bg-page lg:hidden" />
               {/* Collapsed, the tickets fade out under the strip through a soft blur (as in the native app), not a hard edge. */}
@@ -119,7 +120,7 @@ export default function TicketsPage() {
                 className="pointer-events-none absolute -inset-x-[8.5px] top-full h-7 bg-page/40 backdrop-blur-[6px] [mask-image:linear-gradient(to_bottom,black,transparent)] lg:hidden"
               />
             {/* The shadow is a filter on a wrapper: the strip's clip-path would cut off a box-shadow. */}
-            <div ref={passShadow} className="relative">
+            <div ref={passShadow} className="relative light:[filter:drop-shadow(0_4px_7px_rgb(0_0_0/var(--pass-shadow,0)))]">
             <div
               ref={passStrip}
               className="relative flex justify-between overflow-hidden rounded-t-[19px] bg-[#b8242a] px-[15.5px] text-white pt-2 pb-[6.5px] lg:rounded-none"

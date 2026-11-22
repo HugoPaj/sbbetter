@@ -2,7 +2,7 @@
 
 import { Bell, Car, History, SunMoon, CircleHelp, CircleUserRound, IdCard, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
 import { useState } from "react";
-import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
+import { Card, DESK_COL, cn, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { useSetting } from "@/lib/store";
 import { ProfileSheets, type ProfileSheet } from "./sheets";
@@ -16,7 +16,8 @@ export default function ProfilePage() {
   return (
     <div>
       <Header title="Profile" extend />
-      <Overlap className={DESK_COL}>
+      {/* The account card stays in view; the settings below scroll under it. */}
+      <Overlap sticky blur className={cn(DESK_COL, "lg:static")}>
         <Card className="flex h-[72px] items-center gap-[8.5px] px-[15px]">
           <CircleUserRound className="-ml-0.5 size-[35px] shrink-0" strokeWidth={0.9} />
           <div className="min-w-0">
@@ -24,7 +25,9 @@ export default function ProfilePage() {
             <p className="truncate text-[13px] leading-4.25 font-light tracking-tight text-muted">{loggedOut ? "Log in with your SwissPass" : USER.email}</p>
           </div>
         </Card>
+      </Overlap>
 
+      <div className={cn("px-[8.5px]", DESK_COL)}>
         <SectionTitle>Profile Settings</SectionTitle>
         <Card className="overflow-hidden">
           <ListRow icon={User} label="Personal details" onClick={() => setSheet("personal")} />
@@ -78,7 +81,7 @@ export default function ProfilePage() {
           </button>
         </div>
         <div className="h-[calc(112px+var(--home-inset))]" />
-      </Overlap>
+      </div>
       {service && <ServiceSheet service={service} onClose={() => setService(null)} />}
       {sheet && <ProfileSheets sheet={sheet} onClose={() => setSheet(null)} />}
     </div>
