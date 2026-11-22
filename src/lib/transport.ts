@@ -112,6 +112,8 @@ export type Disruption = {
   causeCode?: string;
   /** Closed stretches (two stops, or one), when known (replays). */
   segments?: { id: string; name: string; lat: number; lon: number }[][];
+  /** Trains run again, not all of them: the closure is over, so there is no closure end to forecast (replays). */
+  limited?: boolean;
   /** Key of the replayed real disruption this alert comes from (demo, see lib/replay.ts). */
   replay?: string;
 };
@@ -148,8 +150,13 @@ function toQuery(params: Params): string {
   return qs.toString();
 }
 
+/** The proxy gives up on OJP and then opendata after 12 s each: past this, the network itself is stuck. */
+const CLIENT_TIMEOUT = 30_000;
+
 async function get<T>(path: string, params: Params, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(appUrl(`/api/transport/${path}?${toQuery(params)}`), { signal });
+  // A TimeoutError (not an AbortError), so callers show their error state instead of loading forever.
+  const timeout = AbortSignal.timeout(CLIENT_TIMEOUT);
+  const res = await fetch(appUrl(`/api/transport/${path}?${toQuery(params)}`), { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!res.ok) throw new Error(`Transport API ${path} failed: ${res.status}`);
   return res.json() as Promise<T>;
 }

@@ -54,8 +54,11 @@ export function SimulateDisruptionSheet({
   onPick,
   onReplay,
   onClose,
+  direct,
 }: {
   scenario: Scenario | "";
+  /** One train, no change: there is no connection to miss. */
+  direct?: boolean;
   onPick: (s: Scenario | "") => void;
   /** Opens the replays of real disruptions instead. */
   onReplay?: () => void;
@@ -72,12 +75,12 @@ export function SimulateDisruptionSheet({
           <ChevronRight className="size-4.25 shrink-0" strokeWidth={1.5} />
         </button>
       )}
-      {SCENARIOS.map((o) => (
+      {SCENARIOS.filter((o) => !(direct && o.value === "missed")).map((o) => (
         <button key={o.value} onClick={() => onPick(o.value)} className="flex w-full items-center gap-3.5 py-2.5 text-left">
           <Radio checked={scenario === o.value} />
           <span>
             <span className="block text-[16px] font-light tracking-tight">{o.label}</span>
-            <span className="block text-[13px] font-light text-muted">{o.hint}</span>
+            <span className="block text-[13px] font-light text-muted">{direct && o.value === "delay" ? "A few minutes late." : o.hint}</span>
           </span>
         </button>
       ))}

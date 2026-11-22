@@ -52,6 +52,16 @@ export type Verdict = {
   note?: string;
 };
 
+/** The verdict when the timetable didn't answer, so we can't tell what to do instead. */
+export const UNAVAILABLE: Verdict = {
+  tone: "changed",
+  headline: "We couldn't check the timetable",
+  detail: "So we can't tell you what to take instead yet. Pick the disruption again in a moment, or ask station staff.",
+  why: "The timetable service didn't answer.",
+  notes: {},
+  note: "",
+};
+
 const SMALL_DELAY = 4;
 /** A simulated closure began this long ago: early enough that SBB's own advice is usually still to come. */
 const CLOSED_FOR = 12;
@@ -259,10 +269,8 @@ export async function wayAround(
   blocked: (s: Section) => boolean = (s) => ridesClosed(s, closed),
 ): Promise<Verdict["alternative"] | undefined> {
   const q: JourneyQuery = { ...from, isArrivalTime: false };
-  const list = await getConnections({ ...toConnectionsRequest(q), limit: 6 }, signal).catch((e: Error) => {
-    if (e.name === "AbortError") throw e;
-    return [] as Connection[];
-  });
+  // A failed search throws: "no way round" would be wrong when the timetable just didn't answer.
+  const list = await getConnections({ ...toConnectionsRequest(q), limit: 6 }, signal);
   // Not one that has left before the traveller gets there (a minute's grace, plus any walk to the first stop).
   const earliest = (closed.departure.departureTimestamp ?? 0) - 60 - (conn.accessWalk?.minutes ?? 0) * 60;
   const ok = list

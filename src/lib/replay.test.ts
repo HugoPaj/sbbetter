@@ -71,6 +71,9 @@ describe("Renens VD – Morges, 17 September 2026", () => {
     expect(clockAt(s, 30)).toBe("14:00");
     // "until approx. 18:30" (68 min after the 17:22 start) → 14:38.
     expect(shiftClock("The restriction lasts until approx. 18:30.", s)).toBe("The restriction lasts until approx. 14:38.");
+    expect(shiftClock("Forecast at 6.30pm, buses from 6pm.", s)).toBe("Forecast at 14:38, buses from 14:08.");
+    // Noon is long past at the 17:22 start, so it is the next day; midnight ends the day.
+    expect(shiftClock("Until 12 noon or midnight.", s)).toBe("Until 08:08 or 20:08.");
   });
 
   it("hits the IC to Genève running through without stopping, not Lausanne – Yverdon", () => {

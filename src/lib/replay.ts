@@ -148,12 +148,23 @@ export function shiftClock(text: string, s: Snapshot): string {
   const offMs = off ? (off[1] === "-" ? -1 : 1) * (+off[2] * 60 + +off[3]) * 60000 : 0;
   // Midnight before the start, in the original's own (Zurich) time.
   const midnight = Math.floor((start + offMs) / 86400e3) * 86400e3 - offMs;
-  return text.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g, (_, h: string, m: string) => {
-    let ms = midnight + (+h * 60 + +m) * 60000;
+  const at = (minutes: number) => {
+    let ms = midnight + minutes * 60000;
     // A time well before the start is on the next day ("until approx. 00:30").
     if (ms < start - 3 * 3600e3) ms += 86400e3;
     return formatTime(new Date(ms + s.shift).toISOString());
-  });
+  };
+  return (
+    text
+      // 18:30
+      .replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g, (_, h: string, m: string) => at(+h * 60 + +m))
+      // 6.30pm, 11 am (the English ticker)
+      .replace(/\b(1[0-2]|0?[1-9])(?:\.([0-5]\d))? ?(am|pm)\b/gi, (_, h: string, m: string | undefined, ap: string) =>
+        at(((+h % 12) + (ap.toLowerCase() === "pm" ? 12 : 0)) * 60 + +(m ?? 0)),
+      )
+      .replace(/\b12 noon\b|\bnoon\b/gi, () => at(12 * 60))
+      .replace(/\bmidnight\b/gi, () => at(24 * 60))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +230,7 @@ export function disruptionOf(s: Snapshot): Disruption | null {
     start: new Date(s.start).toISOString(),
     end: st.end !== null ? new Date(s.start + st.end * 60000).toISOString() : undefined,
     planned: false,
+    limited: st.limited,
     segments: st.segments,
     replay: s.replay.key,
   };
@@ -241,7 +253,9 @@ export function withReplay<C extends Connection | null | undefined>(conn: C, s: 
   const known = memo.get(conn);
   if (known) return known as C;
   const d = disruptionOf(s);
-  const out = d && hitSections(conn, s.state).length ? { ...conn, disruptions: [d, ...(conn.disruptions ?? []).filter((x) => !x.replay)] } : conn;
+  // On a train the replay runs over, the replay is the whole story: today's real alerts there would mix
+  // with it (a live "limited service" next to the replay's "trains are running again").
+  const out = hitSections(conn, s.state).length ? { ...conn, disruptions: d ? [d] : [] } : conn;
   memo.set(conn, out);
   return out as C;
 }

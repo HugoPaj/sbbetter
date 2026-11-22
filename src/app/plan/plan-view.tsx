@@ -127,7 +127,10 @@ export function PlanView() {
           onClose={() => setPicking(null)}
           onPick={(e) => {
             setPicking(null);
-            if (picking === "from") setFrom(e);
+            if (picking === "from") {
+              setFrom(e);
+              setError(null);
+            }
             else search(from, e);
           }}
         />

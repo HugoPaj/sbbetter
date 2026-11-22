@@ -130,7 +130,7 @@ pnpm test         # unit tests (Vitest); pnpm test:watch while working
 | --- | --- |
 | Stop search, connections, departure boards, map stops | **Live** — official [OJP 2.0](https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp-landing-page/) API when `OJP_API_KEY` is set, otherwise (or on any OJP error) [transport.opendata.ch](https://transport.opendata.ch). See "Timetable data" below |
 | Real-time delays, platforms, occupancy, disruptions | **Live** via OJP (delays/occupancy also via opendata) |
-| "Current location" routing | Browser geolocation (EPFL fallback). OJP routes from the exact coordinate incl. the walk to the first stop; without OJP it snaps to the nearest stop |
+| "Current location" routing | Browser geolocation; without a fix, the app asks for a starting stop instead of guessing. OJP routes from the exact coordinate incl. the walk to the first stop; without OJP it snaps to the nearest stop |
 | Map | MapLibre + CARTO dark vector tiles |
 | Prices / offers | **Live** NOVA prices (cheapest ticket, e.g. Supersaver, full fare or Half Fare) via the OJP Fare API when `OJP_FARE_API_KEY` is set — `src/lib/server/ojp-fare.ts`, `src/lib/fares.ts`. Otherwise a **mock** estimate by distance — `src/lib/pricing.ts`. Class upgrades and City add-ons are always modelled |
 | User, travelcards, favourites | **Mock** — `src/lib/mock-data.ts` |

@@ -86,6 +86,12 @@ describe("disruptionEnd", () => {
     expect(disruptionEnd({ start: started(20), end: "2500-12-31T23:59:00Z" }, now)!.sbb).toBeNull();
   });
 
+  test("trains running again (limited service): SBB's time only, no forecast of our own", () => {
+    const sbb = new Date(now + 40 * 60_000).toISOString();
+    expect(disruptionEnd({ start: started(200), end: sbb, limited: true }, now)).toEqual({ likely: Date.parse(sbb), safe: Date.parse(sbb), sbb: Date.parse(sbb) });
+    expect(disruptionEnd({ start: started(200), limited: true }, now)).toBeNull();
+  });
+
   test("nothing for planned works, a start still ahead, or no start", () => {
     expect(disruptionEnd({ start: started(20), planned: true }, now)).toBeNull();
     expect(disruptionEnd({ start: started(-30) }, now)).toBeNull();

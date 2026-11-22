@@ -246,12 +246,15 @@ function Steps({ steps, start, className }: { steps: Step[]; start?: number; cla
 }
 
 /** The way round as a real connection; opens it. */
-export function PlanBLink({ plan, className, compare = "later than planned" }: { plan: PlanB; className?: string; compare?: string }) {
+export function PlanBLink({ plan, className, compare = "later than planned", onOpen }: { plan: PlanB; className?: string; compare?: string; /** Called as it opens the connection (e.g. to close the sheet it sits in). */ onOpen?: () => void }) {
   const c = plan.connection;
   return (
     <Link
       href={journeyHref("/connections/detail", plan.query, { key: connectionKey(c) })}
-      onClick={() => rememberConnections([c])}
+      onClick={() => {
+        rememberConnections([c]);
+        onOpen?.();
+      }}
       className={cn("flex items-center gap-3 rounded-[15px] border border-fg/25 px-3 py-2.5 transition-colors hover:bg-fg/5", className)}
     >
       <Split className="size-4.5 shrink-0 rotate-90" strokeWidth={1.75} />
@@ -334,7 +337,7 @@ export function LineMemorySheet({
       {hasDetour && (
         <section className="mb-4">
           {plan === undefined && <Skeleton className="h-[72px] rounded-[15px]" />}
-          {plan && <PlanBLink plan={plan} compare={compare} className="bg-surface" />}
+          {plan && <PlanBLink plan={plan} compare={compare} className="bg-surface" onOpen={onClose} />}
           <p className={cn(SUB, "text-muted", plan !== null && "mt-2")}>
             {plan === null ? "No connection round this stretch fits your journey right now." : "What SBB staff advised the last times this line was closed, searched live for your journey."}
           </p>

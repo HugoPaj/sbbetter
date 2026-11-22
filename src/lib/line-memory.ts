@@ -352,14 +352,17 @@ export async function findPlanB(query: JourneyQuery, plannedArrival: number, str
     const z = zurichDateTime(new Date(iso));
     return `${z.date}T${z.time}`;
   };
+  const failed: Error[] = [];
   const found = await Promise.all(
     detours.map(async (detour): Promise<PlanB | null> => {
       const q: JourneyQuery = { ...query, isArrivalTime: false, via: detour.id, viaName: detour.via };
       // With the path of each leg (OJP), so a train that runs through the closed stretch without stopping is caught.
       const list = await getConnections({ ...toConnectionsRequest(q), limit: 3, track: true }, signal).catch((e: Error) => {
         if (e.name === "AbortError") throw e;
-        return [] as Connection[];
+        failed.push(e);
+        return null;
       });
+      if (!list) return null;
       // Not a train that has left before the journey can start, and not one that takes the closed stretch after all.
       const connection = list.find((c) => !stillOn(c, stretch, detour.id) && clock(c.from.departure) >= `${query.date}T${query.time}`);
       if (!connection) return null;
@@ -368,6 +371,8 @@ export async function findPlanB(query: JourneyQuery, plannedArrival: number, str
     }),
   );
   const options = found.filter((p): p is PlanB => !!p);
+  // Not one search answered: that is no "no Plan B", the timetable is out (callers say so).
+  if (detours.length && failed.length === detours.length) throw failed[0];
   // The detour the traveller was already told about, whenever it works.
   const promised = options.find((p) => p.detour.id === prefer);
   if (promised) return promised;

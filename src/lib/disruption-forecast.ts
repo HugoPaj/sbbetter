@@ -117,7 +117,7 @@ export function causeCode(label: string | null): string {
  * works, or when the start is unknown or still ahead.
  */
 export function disruptionEnd(
-  d: { reason?: string; causeCode?: string; start?: string; end?: string; planned?: boolean },
+  d: { reason?: string; causeCode?: string; start?: string; end?: string; planned?: boolean; limited?: boolean },
   now = Date.now(),
 ): { likely: number; safe: number; sbb: number | null } | null {
   const start = d.start ? Date.parse(d.start) : NaN;
@@ -126,6 +126,8 @@ export function disruptionEnd(
   const end = d.end ? Date.parse(d.end) : NaN;
   // An end weeks away (feeds use the year 2500) means SBB doesn't know.
   const sbb = Number.isFinite(end) && end - start < 7 * 24 * 3600e3 ? end : null;
+  // Trains run again (limited service): past closures say nothing about when the last ones return. SBB's time only.
+  if (d.limited) return sbb ? { likely: sbb, safe: sbb, sbb } : null;
   const f = forecast(d.causeCode && causes[d.causeCode] ? d.causeCode : causeCode(words), (now - start) / 60000, sbb ? (sbb - start) / 60000 : null);
   return { likely: start + f.likelyMinutes * 60000, safe: start + f.safeMinutes * 60000, sbb };
 }

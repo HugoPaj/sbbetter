@@ -13,7 +13,7 @@ import { cachedConnection, loadConnection, rerouteFromSearchParams, rerouteParam
 import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
 import { coverageOf, cutConnection } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
-import { endOfServiceDay, formatShortDate, formatTime } from "@/lib/format";
+import { endOfServiceDay, formatShortDate, formatTime, zurichDateTime, zurichEpoch } from "@/lib/format";
 import { boardingStop, startLabel } from "@/lib/trip-label";
 import { fullName } from "@/lib/mock-data";
 import { usePasses } from "@/lib/travelcards";
@@ -134,6 +134,8 @@ export function OffersView() {
     // Valid until the end of service (05:00 Zurich time), and never before the train arrives.
     const arrival = (conn.to.arrivalTimestamp ?? 0) * 1000;
     const end = new Date(Math.max(endOfServiceDay(start).getTime(), arrival));
+    // Bought ahead: valid from the start of the travel day (Zurich), not from now.
+    const dayStart = (zurichEpoch(zurichDateTime(start).date, "00:00") ?? 0) * 1000;
     // A travelcard covering the rest: the ticket to buy is for the uncovered stretch only.
     const part = stretch ? coverageOf(conn, passes).parts[0] : undefined;
     const handoff = sbbHandoff(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
@@ -143,7 +145,7 @@ export function OffersView() {
       from: stretch?.from ?? startLabel(fromName ?? "", boardingStop(conn)),
       to: stretch?.to ?? toName ?? "",
       via: via || "direct",
-      validFrom: new Date(Math.min(now, start.getTime())).toISOString(),
+      validFrom: new Date(now >= dayStart ? Math.min(now, start.getTime()) : dayStart).toISOString(),
       validTo: end.toISOString(),
       price: total,
       travelClass: effectiveClass as 1 | 2,

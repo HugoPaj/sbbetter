@@ -20,7 +20,7 @@ import { REPLAY_TRIP, showReplayPicker, useReplay, watchTrip } from "@/component
 import { withReplay } from "@/lib/replay";
 import { replayVerdict } from "@/lib/replay-verdict";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
-import { assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
+import { assess, UNAVAILABLE, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { usePasses } from "@/lib/travelcards";
 import { formatTime, zurichDateTime } from "@/lib/format";
 import { boardingStop } from "@/lib/trip-label";
@@ -102,6 +102,8 @@ export function DetailView() {
   const rParams = reroute ? rerouteParams(reroute) : undefined;
   const tripId = (key ?? "") + (reroute ? `~${reroute.key}` : "");
   const [scenario, setScenario] = useSetting<Scenario | "">(`sim:${tripId}`, "");
+  /** Picking a disruption again searches again (after the timetable didn't answer). */
+  const [attempt, setAttempt] = useState(0);
   const [assessed, setAssessed] = useState<{ id: string; verdict: Verdict | null }>({ id: "", verdict: null });
   const assessId = `${raw}#${scenario}`;
 
@@ -111,9 +113,9 @@ export function DetailView() {
     const ctrl = new AbortController();
     assess(conn, q, scenario, ctrl.signal)
       .then((verdict) => setAssessed({ id: assessId, verdict }))
-      .catch((e: Error) => e.name !== "AbortError" && setAssessed({ id: assessId, verdict: null }));
+      .catch((e: Error) => e.name !== "AbortError" && setAssessed({ id: assessId, verdict: UNAVAILABLE }));
     return () => ctrl.abort();
-  }, [conn, raw, scenario, assessId]);
+  }, [conn, raw, scenario, assessId, attempt]);
 
   // Demo: a replayed real disruption that hits this trip gives the same kind of verdict, with the way round to take.
   const [replayAssessed, setReplayAssessed] = useState<{ raw: string; id: string; verdict: Verdict | null } | null>(null);
@@ -124,7 +126,7 @@ export function DetailView() {
     const ctrl = new AbortController();
     replayVerdict(conn, q, replay, ctrl.signal)
       .then((verdict) => setReplayAssessed({ raw, id: replay.id, verdict }))
-      .catch((e: Error) => e.name !== "AbortError" && setReplayAssessed({ raw, id: replay.id, verdict: null }));
+      .catch((e: Error) => e.name !== "AbortError" && setReplayAssessed({ raw, id: replay.id, verdict: { ...UNAVAILABLE, detail: "So we can't tell you what to take instead yet. Try the next update in a moment, or ask station staff." } }));
     return () => ctrl.abort();
   }, [replayHit, conn, raw, replay]);
 
@@ -505,12 +507,14 @@ export function DetailView() {
       {sheet === "sim" && (
         <SimulateDisruptionSheet
           scenario={scenario}
+          direct={!!conn && conn.sections.filter((s) => s.journey).length < 2}
           onReplay={() => {
             setSheet(null);
             showReplayPicker();
           }}
           onPick={(value) => {
             setScenario(value);
+            setAttempt((a) => a + 1);
             setSheet(null);
           }}
           onClose={() => setSheet(null)}

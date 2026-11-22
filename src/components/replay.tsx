@@ -515,7 +515,8 @@ function ReplaySheet({ snap, trip, onStep, onPick, onClose }: { snap: Snapshot; 
       if (i > snap.step) return;
       const m = nextMove(snapshot(r, { key: r.key, step: i, anchor: snap.start + r.updates[i].t * 60000 }), trip.conn);
       const now = m ? `${m.tone}|${m.headline}` : "";
-      told.set(i, now && now !== before ? m : null);
+      // The first update opens the trip itself, with its advice on screen: nothing is sent for it.
+      told.set(i, i > 0 && now && now !== before ? m : null);
       before = now;
     });
   }
@@ -558,7 +559,7 @@ function ReplaySheet({ snap, trip, onStep, onPick, onClose }: { snap: Snapshot; 
         <p className="text-[12px] font-bold tracking-wide text-muted uppercase">When will it be over?</p>
         <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13.5px] leading-snug">
           <dt className="font-light text-muted">This app</dt>
-          <dd>{end ? `likely ${formatTime(new Date(end.likely).toISOString())}, 80 % sure by ${formatTime(new Date(end.safe).toISOString())}` : "—"}</dd>
+          <dd>{d?.limited ? "trains run again, so only SBB's time" : end ? `likely ${formatTime(new Date(end.likely).toISOString())}, 80 % sure by ${formatTime(new Date(end.safe).toISOString())}` : "—"}</dd>
           <dt className="font-light text-muted">SBB says</dt>
           <dd>{sbbEnd != null ? `${snap.state?.atLeast ? "at least " : "about "}${clockAt(snap, sbbEnd)}` : "nothing yet"}</dd>
           <dt className="font-light text-muted">In hindsight</dt>
