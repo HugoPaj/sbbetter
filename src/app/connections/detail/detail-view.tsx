@@ -364,7 +364,7 @@ export function DetailView() {
       <div className={mapMode ? "relative min-h-0 flex-1" : "contents lg:block"}>
       {mapMode && <TripMap connection={conn} origin={origin} fromLabel={fromLabel} accessWalk={walk} topInset={Math.max(0, topInset - 24)} onWalk={setWalkSheet} />}
       {/* List view: the trip and its buttons stay in view; the itinerary scrolls under them. */}
-      <Overlap sticky={!mapMode} blur className="lg:static">
+      <Overlap sticky={!mapMode} blur tail={31} className="lg:static">
         <div ref={summaryRef}>
         <Card className="px-[15px] pt-3.5 pb-4">
           <p className="text-[16px] leading-snug font-bold">
@@ -374,6 +374,7 @@ export function DetailView() {
             <span className="inline-block">{query.toName}</span>
           </p>
         </Card>
+        {/* 44px buttons, 13px of them over the card: the other 31px are the Overlap's `tail`. */}
         <div className="-mt-[13px] flex gap-[8.5px] px-[15px]">
           <RoundButton
             className={ring}
