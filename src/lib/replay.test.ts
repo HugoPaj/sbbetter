@@ -168,10 +168,15 @@ describe("Wädenswil – Pfäffikon SZ, 10 September 2026", () => {
   for (const [id, xy] of Object.entries({ "8503000": [47.37818, 8.54021], "8503202": [47.29598, 8.56477], "8503209": [47.203, 8.77813], "8509411": [47.04482, 9.44626], "8509000": [46.85308, 9.52894] }))
     for (const p of zurichChur.sections[0].journey!.passList) if (p.station.id === id) p.station.coordinate = { type: "WGS84", x: xy[0], y: xy[1] };
 
-  it("sends Zürich – Chur via St. Gallen, then not back to buses SBB has withdrawn", () => {
+  it("sends Zürich – Chur via St. Gallen, and keeps it once SBB clears its advice with the line still closed", () => {
     expect(nextMove(at(r, 66), zurichChur)?.headline).toBe("Travel via St. Gallen");
+    // 10:35: "Some advice withdrawn", all of it, while the line stays closed until 10:53.
     const later = nextMove(at(r, 292), zurichChur)!;
-    expect(later.headline).toBe("Your IC 3 can't get through");
-    expect(later.detail).toContain("no less than");
+    expect(later).toMatchObject({ tone: "act", headline: "Travel via St. Gallen" });
+    expect(later.detail).toContain("taken it off the ticker");
+    expect(nextMove(at(r, 311), zurichChur)?.headline).toBe("Trains run again, not all of them");
+    // No alert for SBB tidying its ticker.
+    const steps = [...notifySteps(r, zurichChur)];
+    expect(steps.filter((i) => r.updates[i].t >= 292 && r.updates[i].t < 311)).toEqual([]);
   });
 });

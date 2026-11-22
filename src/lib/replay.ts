@@ -307,16 +307,26 @@ export function nextMove(s: Snapshot, conn: Connection): Move | null {
       source: said(restored),
     };
 
-  const advice = relevantAdvice(conn, st, hits);
+  let advice = relevantAdvice(conn, st, hits);
+  // SBB sometimes clears its advice while the line is still closed (just before an expected reopening):
+  // keep the last advice it gave for this journey rather than saying there is none.
+  let dropped = "";
+  if (!advice.length) {
+    const before = s.replay.states.findLast((x) => x.t < st.t && relevantAdvice(conn, x, hitSections(conn, x)).length);
+    if (before) {
+      advice = relevantAdvice(conn, before, hitSections(conn, before));
+      dropped = " SBB has since taken it off the ticker, but it's the last advice they gave.";
+    }
+  }
   const adviceAt = (a: Advice) => s.seen.find((u) => u.source === "ticker" && u.changes.some((c) => c.includes(a.text))) ?? s.seen.find((u) => u.source === "ticker");
   const via = advice.find((a) => a.kind === "via");
-  if (via?.via) return { tone: "act", headline: `Travel via ${via.via.name}`, detail: `SBB: “${shiftClock(via.text, s)}” Your ${line} can't get through ${where}.`, source: said(adviceAt(via)), via: via.via };
+  if (via?.via) return { tone: "act", headline: `Travel via ${via.via.name}`, detail: `SBB: “${shiftClock(via.text, s)}”${dropped} Your ${line} can't get through ${where}.`, source: said(adviceAt(via)), via: via.via };
   const bus = advice.find((a) => a.kind === "bus");
   if (bus)
     return {
       tone: "act",
       headline: `Replacement bus ${bus.a[0].name} – ${bus.b[0].name}`,
-      detail: `No trains between ${bus.a[0].name} and ${bus.b[0].name}. Take your ${line} as far as it goes, then the bus.`,
+      detail: `No trains between ${bus.a[0].name} and ${bus.b[0].name}. Take your ${line} as far as it goes, then the bus.${dropped}`,
       source: said(adviceAt(bus)),
     };
   // Buses the control centre has ordered and SBB hasn't announced yet (not once SBB has announced, then withdrawn them).
