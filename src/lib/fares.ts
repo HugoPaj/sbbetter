@@ -21,7 +21,10 @@ const inflight = new Set<string>();
 /** Failed lookups per key: retried a couple of times before settling for the estimate. */
 const failures = new Map<string, number>();
 const MAX_RETRIES = 2;
-let available = true;
+/** The server said fares are unavailable (no OJP Fare access): use estimates until then, then ask again. */
+let unavailableUntil = 0;
+const UNAVAILABLE_FOR = 10 * 60_000;
+const available = () => Date.now() >= unavailableUntil;
 let version = 0;
 /** Bumped when held-back or failed refs may be asked for again: the hooks then re-request what they still show. */
 let retries = 0;
@@ -41,7 +44,7 @@ function subscribe(l: () => void) {
 
 async function load(refs: string[], halfFare: boolean) {
   const todo = refs.filter((r) => !cache.has(keyOf(r, halfFare)) && !inflight.has(keyOf(r, halfFare)));
-  if (!todo.length || !available) return;
+  if (!todo.length || !available()) return;
   todo.forEach((r) => inflight.add(keyOf(r, halfFare)));
   // A ref the server couldn't price this time is left out of its answer. Held back for the API's
   // rate limit: come back when it says (as often as it takes). Failed: try again a couple of times.
@@ -60,11 +63,21 @@ async function load(refs: string[], halfFare: boolean) {
     try {
       const res = await fetch(`/api/transport/fares?refs=${chunk.map(encodeURIComponent).join(",")}&hta=${halfFare ? 1 : 0}`);
       const data = (await res.json()) as FaresResponse;
-      if (!data.available) available = false;
       for (const r of chunk) {
-        if (r in data.fares || !data.available) cache.set(keyOf(r, halfFare), data.fares[r] ?? null);
+        if (r in data.fares) cache.set(keyOf(r, halfFare), data.fares[r]);
+        else if (!data.available) continue; // Not cached: priced again once fares are back.
         else if (data.retryAfter) again = true;
         else failed(r);
+      }
+      if (!data.available) {
+        unavailableUntil = Date.now() + UNAVAILABLE_FOR;
+        todo.slice(i).forEach((r) => inflight.delete(keyOf(r, halfFare)));
+        emit();
+        setTimeout(() => {
+          retries++;
+          emit();
+        }, UNAVAILABLE_FOR + 1000);
+        return;
       }
       if (data.retryAfter) {
         // The budget is spent: asking for the remaining batches now would only be held back too.
@@ -103,9 +116,10 @@ function quoteRefsOf(c: Connection, passes: Passes): string[] {
 }
 
 const fareState = (ref: string | undefined, halfFare: boolean): FareState => {
-  if (!ref || !available) return { status: "estimate" };
+  if (!ref) return { status: "estimate" };
   const k = keyOf(ref, halfFare);
-  if (!cache.has(k)) return { status: "loading" };
+  // While fares are unavailable, prices already found still show; the rest are estimates.
+  if (!cache.has(k)) return available() ? { status: "loading" } : { status: "estimate" };
   const fare = cache.get(k);
   return fare && fare.second !== null ? { status: "nova", fare } : { status: "estimate" };
 };

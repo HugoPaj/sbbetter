@@ -242,8 +242,9 @@ export function DetailView() {
   /** Search the way back, leaving one hour after arrival. */
   function returnJourney() {
     if (!query) return;
+    if (!conn?.to.arrivalTimestamp) return toast("The connection is still loading.");
     const from = origin && journeySections[0]?.departure.station.id ? { id: journeySections[0].departure.station.id, name: journeySections[0].departure.station.name ?? "" } : { id: query.from, name: query.fromName };
-    const when = zurichDateTime(new Date(((conn?.to.arrivalTimestamp ?? 0) + 3600) * 1000));
+    const when = zurichDateTime(new Date((conn.to.arrivalTimestamp + 3600) * 1000));
     router.push(journeyHref("/connections", { ...query, from: query.to, fromName: query.toName, to: from.id, toName: from.name, ...when, isArrivalTime: false, walkMinutes: undefined }));
   }
 
@@ -445,9 +446,9 @@ export function DetailView() {
             </OutlineButton>
           ) : (
             <PrimaryButton href={offersHref}>
-              Tickets from&nbsp;
+              {fare?.source === "estimate" ? "Tickets about" : "Tickets from"}&nbsp;
               <b className="flex items-center gap-[5px] font-bold" aria-busy={price === null}>
-                CHF {price === null ? <Skeleton className="h-[13px] w-[38px] bg-white/45" /> : price.toFixed(2)}
+                {fare?.source === "estimate" && <abbr title="Estimated price" className="no-underline">≈</abbr>}CHF {price === null ? <Skeleton className="h-[13px] w-[38px] bg-white/45" /> : price.toFixed(2)}
               </b>
             </PrimaryButton>
           )}

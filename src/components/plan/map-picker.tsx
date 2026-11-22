@@ -6,7 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { nearbyStations, type Location } from "@/lib/transport";
 import { usePosition, type Endpoint } from "@/lib/use-position";
 import { MAP_STYLES } from "./journey-map";
-import { PrimaryButton, useEscape } from "../ui";
+import { PrimaryButton, toast, useEscape } from "../ui";
 
 type LatLon = { lat: number; lon: number };
 
@@ -34,8 +34,11 @@ export function MapPicker({
   const [moving, setMoving] = useState(false);
   const ref = useEscape(onClose);
 
-  // Create the map once, at the (fallback) position.
+  // Create the map once, at the latest known position (a fix can arrive while maplibre loads).
   const start = useRef(pos);
+  useEffect(() => {
+    start.current = pos;
+  }, [pos]);
   useEffect(() => {
     let cancelled = false;
     let map: import("maplibre-gl").Map | undefined;
@@ -141,7 +144,7 @@ export function MapPicker({
         <div className="pointer-events-none absolute top-1/2 left-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40" />
         <button
           aria-label="Go to my location"
-          onClick={() => mapRef.current?.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(mapRef.current.getZoom(), 15) })}
+          onClick={() => (pos.real ? mapRef.current?.easeTo({ center: [pos.lon, pos.lat], zoom: Math.max(mapRef.current.getZoom(), 15) }) : toast(pos.settled ? "Your location isn't available." : "Finding your location…"))}
           className="absolute right-3 bottom-3 grid size-11 place-items-center rounded-full bg-surface text-fg shadow-lg shadow-black/40"
         >
           <LocateFixed className="size-5" strokeWidth={1.75} />

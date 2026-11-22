@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Briefcase, ChevronRight, House, Tickets, TriangleAlert } from "lucide-react";
@@ -31,21 +31,31 @@ export function PlanView() {
   const [board, setBoard] = useState<{ id: string; name: string } | null>(null);
   const [others, setOthers] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [navigating, startNavigation] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   async function search(f: Endpoint, t: Endpoint) {
+    if (busy || navigating) return;
+    // Never search from a made-up place: "Current location" needs a real fix.
+    if ((f.id === CURRENT_LOCATION || t.id === CURRENT_LOCATION) && !pos.real) {
+      setError(pos.settled ? "Your location isn't available. Choose a starting stop." : "Still finding your location… try again in a moment.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const q = await buildJourney(f, t, pos);
-      router.push(journeyHref("/connections", q));
+      startNavigation(() => router.push(journeyHref("/connections", q)));
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      // The page stays mounted (cacheComponents) and is shown again on Back.
       setBusy(false);
     }
   }
 
   async function openNearestBoard() {
+    if (!pos.real) return toast(pos.settled ? "Your location isn't available." : "Finding your location…");
     try {
       const [s] = await nearbyStations(pos.lat, pos.lon);
       if (s) setBoard({ id: s.id!, name: s.name! });
@@ -81,7 +91,7 @@ export function PlanView() {
                 <div className="ml-11 h-px bg-surface-3" />
                 <button onClick={() => setPicking("to")} className="flex h-[47.5px] w-full items-center gap-3 pr-2.5 pl-3 text-left transition-colors hover:bg-fg/5">
                   <StopIcon className="size-5 shrink-0" />
-                  <span className="truncate text-[16px] font-light tracking-tight text-muted">{busy ? "Searching…" : "To"}</span>
+                  <span className="truncate text-[16px] font-light tracking-tight text-muted">{busy || navigating ? "Searching…" : "To"}</span>
                 </button>
               </div>
               <div className="flex items-center border-l border-surface-3 px-[13.5px]">

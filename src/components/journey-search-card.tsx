@@ -27,7 +27,8 @@ export function JourneySearchCard({
 }) {
   const [sheet, setSheet] = useState<"advanced" | "datetime" | "from" | "to" | null>(null);
   const isCurrent = query.fromName === "Current location";
-  const when = new Date(`${query.date}T${query.time || "00:00"}:00`);
+  // Noon UTC is the same calendar day in Zurich whatever the phone's time zone; no date means today.
+  const day = query.date ? formatShortDate(new Date(`${query.date}T12:00:00Z`)) : "Today";
 
   const swap = () =>
     onChange({
@@ -67,10 +68,10 @@ export function JourneySearchCard({
             onClick={() => setSheet("datetime")}
             className="flex min-w-0 items-center gap-[8.5px] pl-11 text-[15.5px] font-light tracking-tight tabular-nums whitespace-nowrap text-muted"
           >
-            <span>{formatShortDate(when)}</span>
+            <span>{day}</span>
             <span className="h-4.25 w-px shrink-0 bg-surface-3" />
             <span>
-              {query.time} {query.isArrivalTime ? "arr" : "dep"}
+              {query.time || "Now"} {query.isArrivalTime ? "arr" : "dep"}
             </span>
             <span className="h-4.25 w-px shrink-0 bg-surface-3" />
           </button>
@@ -331,7 +332,15 @@ function DateTimeSheet({
         >
           Now
         </button>
-        <PrimaryButton onClick={() => onApply({ date, time, isArrivalTime: arr === "arr" })}>Search</PrimaryButton>
+        <PrimaryButton
+          onClick={() => {
+            // A cleared field means "now" rather than an empty search.
+            const n = zurichDateTime();
+            onApply({ date: date || n.date, time: time || n.time, isArrivalTime: arr === "arr" });
+          }}
+        >
+          Search
+        </PrimaryButton>
       </div>
     </Sheet>
   );

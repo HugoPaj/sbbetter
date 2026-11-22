@@ -116,13 +116,15 @@ export async function assess(conn: Connection, query: JourneyQuery, scenario: Sc
   const arr = first.s.arrival.arrivalTimestamp ?? 0;
   const slack = Math.round(((next.s.departure.departureTimestamp ?? 0) - arr) / 60);
 
-  if (scenario === "delay" && slack > SMALL_DELAY) {
+  // "Small delay" promises the change still works: on a tight change, the delay is smaller.
+  if (scenario === "delay") {
+    const late = Math.max(1, Math.min(SMALL_DELAY, slack - 1));
     return {
       tone: "ok",
       headline: `You'll still arrive at ${plannedArrival}`,
-      detail: `${line} is running ${SMALL_DELAY} min late. Your change in ${stationName} still works.`,
+      detail: `${line} is running ${late} min late. Your change in ${stationName} still works${slack - late <= 1 ? ", but it will be tight" : ""}.`,
       why: WHY_LATE,
-      notes: { [first.i]: { kind: "late", minutes: SMALL_DELAY } },
+      notes: { [first.i]: { kind: "late", minutes: late } },
     };
   }
 

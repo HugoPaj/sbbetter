@@ -1,5 +1,5 @@
 import { connectionKey, uniqueConnections } from "./connection-key";
-import { zurichDateTime } from "./format";
+import { zurichDateTime, zurichEpoch } from "./format";
 import { toConnectionsRequest, type JourneyQuery } from "./journey-query";
 import type { Quote } from "./pricing";
 import { getConnections, type Connection } from "./transport";
@@ -130,15 +130,6 @@ export function cheaperThatDay(ref: Connection, candidates: Connection[], priceO
   }
   items.sort((a, b) => depOf(a.connection) - depOf(b.connection));
   return { items, pending, lowest: items.length ? Math.min(...items.map((i) => i.fare.secondClass)) : null };
-}
-
-/** Epoch seconds of a Zurich wall-clock date ("2026-11-21") and time ("18:50"). */
-function zurichEpoch(date: string, time: string): number | null {
-  const guess = Date.parse(`${date}T${time}:00Z`);
-  if (Number.isNaN(guess)) return null;
-  const shown = zurichDateTime(new Date(guess));
-  const offset = Date.parse(`${shown.date}T${shown.time}:00Z`) - guess;
-  return (guess - offset) / 1000;
 }
 
 /**

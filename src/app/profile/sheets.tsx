@@ -8,7 +8,7 @@ import { actions, useAppState, useSetting } from "@/lib/store";
 import { THEME_OPTIONS, setTheme, useThemeChoice } from "@/lib/theme";
 import { NATIONAL, travelcardNames, useCatalog, useTravelcards, type NationalId, type ZonePassMeta } from "@/lib/travelcards";
 
-export type ProfileSheet = "personal" | "travelcards" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "appearance" | "help" | "legal" | "logout";
+export type ProfileSheet = "personal" | "travelcards" | "copassenger" | "plates" | "wallet" | "notifications" | "ads" | "purchase" | "appearance" | "help" | "legal" | "logout" | "reset";
 
 const INPUT = "h-[44px] w-full rounded-[15px] bg-surface-2 px-3.5 text-[16px] font-light tracking-tight outline-none placeholder:text-muted";
 
@@ -214,7 +214,7 @@ function CoPassengers() {
   const [reduction, setReduction] = useState(REDUCTIONS[1]);
   const add = () => {
     if (!name.trim()) return toast("Please enter a name.");
-    actions.set({ coPassengers: [...coPassengers, { id: `cp-${coPassengers.length}-${name.trim()}`, name: name.trim(), birthDate: birth, reduction }] });
+    actions.set({ coPassengers: [...coPassengers, { id: `cp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, name: name.trim(), birthDate: birth, reduction }] });
     setName("");
     setBirth("");
     toast(`${name.trim()} added as co-passenger.`);
@@ -474,6 +474,29 @@ function Logout({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ResetDemo({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      <p className="px-1 text-[15px] leading-snug font-light text-fg/85">
+        This deletes your tickets, saved trips, co-passengers, licence plates, commute, recent stops, travelcards and settings, and puts back the demo
+        defaults. Your appearance setting is kept.
+      </p>
+      <div className="mt-5 space-y-2.5">
+        <PrimaryButton
+          onClick={() => {
+            actions.reset();
+            onClose();
+            toast("Demo data reset.");
+          }}
+        >
+          Reset demo data
+        </PrimaryButton>
+        <OutlineButton onClick={onClose}>Cancel</OutlineButton>
+      </div>
+    </>
+  );
+}
+
 function Appearance() {
   const choice = useThemeChoice();
   return (
@@ -504,11 +527,12 @@ const TITLES: Record<ProfileSheet, string> = {
   help: "Help & Contact",
   legal: "Legal",
   logout: "Log out",
+  reset: "Reset demo data",
 };
 
 export function ProfileSheets({ sheet, onClose }: { sheet: ProfileSheet; onClose: () => void }) {
   return (
-    <Sheet title={TITLES[sheet]} onClose={onClose} full={sheet !== "logout" && sheet !== "appearance"}>
+    <Sheet title={TITLES[sheet]} onClose={onClose} full={sheet !== "logout" && sheet !== "reset" && sheet !== "appearance"}>
       {sheet === "personal" && <PersonalDetails />}
       {sheet === "travelcards" && <Travelcards />}
       {sheet === "copassenger" && <CoPassengers />}
@@ -521,6 +545,7 @@ export function ProfileSheets({ sheet, onClose }: { sheet: ProfileSheet; onClose
       {sheet === "help" && <Help />}
       {sheet === "legal" && <Legal />}
       {sheet === "logout" && <Logout onClose={onClose} />}
+      {sheet === "reset" && <ResetDemo onClose={onClose} />}
     </Sheet>
   );
 }

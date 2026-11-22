@@ -58,8 +58,9 @@ export function journeyFromSearchParams(sp: URLSearchParams): JourneyQuery | nul
     fromName: sp.get("fromName") ?? from,
     to,
     toName: sp.get("toName") ?? to,
-    date: sp.get("date") ?? "",
-    time: sp.get("time") ?? "",
+    // Malformed values are dropped: empty means "now" everywhere downstream.
+    date: /^\d{4}-\d{2}-\d{2}$/.test(sp.get("date") ?? "") && !Number.isNaN(Date.parse(sp.get("date")!)) ? sp.get("date")! : "",
+    time: /^([01]\d|2[0-3]):[0-5]\d$/.test(sp.get("time") ?? "") ? sp.get("time")! : "",
     isArrivalTime: sp.get("arr") === "1",
     transportations: tr,
     walkMinutes: sp.get("walk") ? Number(sp.get("walk")) : undefined,

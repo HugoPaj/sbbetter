@@ -57,6 +57,27 @@ export function zurichDateTime(d: Date = new Date()): { date: string; time: stri
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
+/** Epoch seconds of a Zurich wall-clock date ("2026-11-21") and time ("18:50"). */
+export function zurichEpoch(date: string, time: string): number | null {
+  const guess = Date.parse(`${date}T${time}:00Z`);
+  if (Number.isNaN(guess)) return null;
+  const shown = zurichDateTime(new Date(guess));
+  const offset = Date.parse(`${shown.date}T${shown.time}:00Z`) - guess;
+  return (guess - offset) / 1000;
+}
+
+/**
+ * End of the SBB service day containing `d`: 05:00 Zurich time the next morning
+ * (or the same morning, for a moment before 05:00). Day tickets are valid until then.
+ */
+export function endOfServiceDay(d: Date): Date {
+  const { date, time } = zurichDateTime(d);
+  const day = new Date(`${date}T12:00:00Z`);
+  if (time >= "05:00") day.setUTCDate(day.getUTCDate() + 1);
+  const end = zurichEpoch(day.toISOString().slice(0, 10), "05:00");
+  return end == null ? new Date(d.getTime() + 86_400_000) : new Date(end * 1000);
+}
+
 export function formatChf(amount: number): string {
   return amount.toFixed(2);
 }

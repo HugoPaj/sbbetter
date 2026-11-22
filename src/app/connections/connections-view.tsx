@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { Header, ErrorBox, Overlap } from "@/components/ui";
+import { Header, ErrorBox, Overlap, toast } from "@/components/ui";
 import { ConnectionListSkeleton } from "@/components/skeletons";
 import { ConnectionCard } from "@/components/journey";
 import { CheaperNearby, DayPrices } from "@/components/cheaper-nearby";
@@ -48,6 +48,7 @@ export function ConnectionsView() {
   // Every departure of the day, scanned only when the traveller asks for the cheapest times.
   const [day, setDay] = useState<{ key: string; open: boolean; items: Connection[]; scanning: boolean } | null>(null);
   const dayScan = useRef<AbortController | null>(null);
+  const moreCtrl = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const q = journeyFromSearchParams(new URLSearchParams(queryKey));
@@ -72,13 +73,15 @@ export function ConnectionsView() {
     return () => {
       ctrl.abort();
       dayScan.current?.abort();
+      moreCtrl.current?.abort();
+      moreCtrl.current = null;
+      setLoadingMore(null);
     };
   }, [queryKey, retry]);
 
   const current = result.key === `${queryKey}#${retry}`;
   const items = current ? result.items : null;
   const error = current ? result.error : null;
-  const setItems = (fn: (cur: Connection[] | null) => Connection[]) => setResult((r) => ({ ...r, items: fn(r.items) }));
   const load = () => setRetry((n) => n + 1);
   // Only while its sheet is open: a closed sheet shouldn't keep spending the price API's quota.
   const dayItems = day?.key === result.key && day.open ? day.items : [];
@@ -99,23 +102,41 @@ export function ConnectionsView() {
   const update = (q: JourneyQuery) => router.replace(journeyHref("/connections", q));
 
   async function more(dir: "earlier" | "later") {
-    if (!items?.length || !query) return;
+    if (!items?.length || !query || loadingMore) return;
+    // Results belong to this search: a new search (or a retry) aborts the request and drops its answer.
+    const key = result.key;
+    moreCtrl.current?.abort();
+    const ctrl = new AbortController();
+    moreCtrl.current = ctrl;
     setLoadingMore(dir);
     try {
       const anchor =
         dir === "later"
           ? new Date(((items.at(-1)!.from.departureTimestamp ?? 0) + 60) * 1000)
           : new Date(((items[0].from.departureTimestamp ?? 0) - 75 * 60) * 1000);
-      const next = await getConnections({ ...toConnectionsRequest(query), ...zurichDateTime(anchor), isArrivalTime: false, limit: 5 });
+      const next = await getConnections({ ...toConnectionsRequest(query), ...zurichDateTime(anchor), isArrivalTime: false, limit: 5 }, ctrl.signal);
+      if (ctrl.signal.aborted) return;
       rememberConnections(next);
-      setItems((cur) => {
-        const seen = new Set(cur!.map(connectionKey));
-        const fresh = uniqueConnections(next).filter((c) => !seen.has(connectionKey(c)));
-        const merged = dir === "later" ? [...cur!, ...fresh] : [...fresh, ...cur!];
-        return merged.sort((a, b) => (a.from.departureTimestamp ?? 0) - (b.from.departureTimestamp ?? 0));
+      const seen = new Set(items.map(connectionKey));
+      const fresh = uniqueConnections(next).filter((c) => !seen.has(connectionKey(c)));
+      if (!fresh.length) {
+        toast(dir === "earlier" ? "No earlier connections." : "No later connections.");
+        return;
+      }
+      setResult((r) => {
+        if (r.key !== key || !r.items) return r;
+        const have = new Set(r.items.map(connectionKey));
+        const add = fresh.filter((c) => !have.has(connectionKey(c)));
+        const merged = dir === "later" ? [...r.items, ...add] : [...add, ...r.items];
+        return { ...r, items: merged.sort((a, b) => (a.from.departureTimestamp ?? 0) - (b.from.departureTimestamp ?? 0)) };
       });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") toast(`Could not load ${dir} connections.`);
     } finally {
-      setLoadingMore(null);
+      if (moreCtrl.current === ctrl) {
+        moreCtrl.current = null;
+        setLoadingMore(null);
+      }
     }
   }
 

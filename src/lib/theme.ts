@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { manifestHref } from "./app-manifest";
 
 /**
  * Light / dark appearance. The choice lives in localStorage; "system" (nothing
@@ -36,7 +37,10 @@ function resolved(): Theme {
 }
 
 function apply() {
-  document.documentElement.dataset.theme = resolved();
+  const theme = resolved();
+  document.documentElement.dataset.theme = theme;
+  // The install splash screen takes its colour from the manifest.
+  document.querySelector('link[rel="manifest"]')?.setAttribute("href", manifestHref(theme));
   listeners.forEach((l) => l());
 }
 

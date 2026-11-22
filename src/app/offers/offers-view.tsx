@@ -12,7 +12,7 @@ import { cachedConnection, loadConnection, rerouteFromSearchParams, rerouteParam
 import { cityOf, estimateFare, passSummary } from "@/lib/pricing";
 import { coverageOf, cutConnection } from "@/lib/passes";
 import { usePrices } from "@/lib/fares";
-import { formatShortDate, formatTime } from "@/lib/format";
+import { endOfServiceDay, formatShortDate, formatTime } from "@/lib/format";
 import { fullName } from "@/lib/mock-data";
 import { usePasses } from "@/lib/travelcards";
 import { actions, useAppState, useSetting } from "@/lib/store";
@@ -112,6 +112,8 @@ export function OffersView() {
   const productKnown = !!fare || isReturn;
   const productName = isReturn ? "Return Ticket" : covered && ticketCount === 0 && upgradeName ? upgradeName : (novaName ?? "Point-to-point Ticket");
   const effectiveClass = klass === "1" || offer !== "regular" ? 1 : 2;
+  /** NOVA's cheapest product can be a Supersaver: tied to the train and not refundable. */
+  const saver = /saver|spar/i.test(productName);
 
   /**
    * Tickets are bought in the real SBB app (deep link). The app keeps a demo copy of the ticket,
@@ -126,8 +128,9 @@ export function OffersView() {
     // A point-to-point ticket is valid on its day of travel; it shows from now on.
     const now = clock();
     const start = new Date((conn.from.departureTimestamp ?? now / 1000) * 1000);
-    const end = new Date(start);
-    end.setHours(23, 59, 59);
+    // Valid until the end of service (05:00 Zurich time), and never before the train arrives.
+    const arrival = (conn.to.arrivalTimestamp ?? 0) * 1000;
+    const end = new Date(Math.max(endOfServiceDay(start).getTime(), arrival));
     actions.addTicket({
       id: `t-${now}`,
       product: productName,
@@ -241,7 +244,7 @@ export function OffersView() {
                 <div className="flex items-baseline justify-between gap-2.5">
                   <span className="text-[16px] leading-[22px] font-bold">Regular offer</span>
                   <span className="text-[15px] font-bold whitespace-nowrap">
-                    <Chf value={fare ? base : null} />
+                    <Chf value={fare ? base : null} estimate={fare?.source === "estimate"} />
                   </span>
                 </div>
                 <p className="text-[14px] leading-[20px] font-light tracking-tight">
@@ -274,7 +277,7 @@ export function OffersView() {
                 <Checkbox checked={city} />
                 <span className="min-w-0 flex-1 truncate text-[16px] font-light tracking-tight">City {cityOf(toName ?? "")}</span>
                 <span className="text-[16px] font-light whitespace-nowrap">
-                  + <Chf value={cityAddOn} />
+                  + <Chf value={cityAddOn} estimate={fare?.source !== "nova"} />
                 </span>
               </button>
             )}
@@ -334,8 +337,8 @@ export function OffersView() {
             </div>
           </Card>
           <p className="my-3.5 px-[3.5px] text-[11px] text-muted">You pay in the SBB app (or on sbb.ch if it isn&apos;t installed).{" "}
-            {fare.source === "nova" ? "Prices from SBB's NOVA price service (OJP Fare test system)." : "Prices are estimated."}</p>
-          <PrimaryButton onClick={purchase}>Buy in the SBB app · CHF {total.toFixed(2)}</PrimaryButton>
+            {fare.source === "nova" ? "Prices from SBB's NOVA price service (OJP Fare test system)." : "Prices are estimated (≈); the SBB app shows the exact amount."}</p>
+          <PrimaryButton onClick={purchase}>Buy in the SBB app · {fare.source === "estimate" ? "≈ " : ""}CHF {total.toFixed(2)}</PrimaryButton>
         </Sheet>
       )}
 
@@ -369,9 +372,23 @@ export function OffersView() {
               {isReturn ? "Valid for the outward and return journey" : "Valid for a single journey"} from {stretch?.from ?? fromName} to {stretch?.to ?? toName}
               {via && !pass ? ` via ${via}` : ""} on the day of travel.
             </li>
-            <li>Valid on all connections of the chosen route until the end of service (5 am the next day); not tied to a specific train.</li>
-            <li>{effectiveClass === 1 ? "1st" : "2nd"} class. The price shown includes your Half Fare Travelcard discount.</li>
-            <li>Refundable before the first day of validity (a deductible may apply).</li>
+            {saver ? (
+              <>
+                <li>Valid only on the connection you chose: tied to these trains, at these times.</li>
+                <li>
+                  {effectiveClass === 1 ? "1st" : "2nd"} class.{passes.halfFare ? " The price shown includes your Half Fare Travelcard discount." : ""}
+                </li>
+                <li>Not refundable and cannot be exchanged.</li>
+              </>
+            ) : (
+              <>
+                <li>Valid on all connections of the chosen route until the end of service (5 am the next day); not tied to a specific train.</li>
+                <li>
+                  {effectiveClass === 1 ? "1st" : "2nd"} class.{passes.halfFare ? " The price shown includes your Half Fare Travelcard discount." : ""}
+                </li>
+                <li>Refundable before the first day of validity (a deductible may apply).</li>
+              </>
+            )}
           </ul>
           <p className="mt-3 px-1 text-[11px] text-muted">Prototype: conditions and prices are illustrative.</p>
         </Sheet>
@@ -395,9 +412,10 @@ function Times() {
 }
 
 /** "CHF 12.40"; the amount is a placeholder while its price loads (null). */
-function Chf({ value }: { value: number | null }) {
+function Chf({ value, estimate }: { value: number | null; estimate?: boolean }) {
   return (
     <>
+      {estimate && value !== null && <abbr title="Estimated price" className="no-underline">≈ </abbr>}
       <span className="text-[12px]">CHF</span> {value === null ? <Skeleton className="inline-block h-[0.8em] w-[2.6em] align-baseline" /> : value.toFixed(2)}
     </>
   );

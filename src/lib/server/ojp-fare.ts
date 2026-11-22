@@ -23,6 +23,8 @@ const FARE_ENDPOINT = process.env.OJP_FARE_URL || "https://api.opentransportdata
 const TRIP_TTL = 30 * 60_000;
 const FARE_TTL = 30 * 60_000;
 const MAX_TRIPS = 1000;
+/** Whole trips and their stretches, full and half fare: a few per remembered trip. */
+const MAX_FARES = 4000;
 /** NOVA product code of a discounted day pass sometimes returned instead of a ticket. */
 const DAY_PASS_CODES = new Set(["2361"]);
 /** NOVA product code of the regular point-to-point ticket (anything else may be a Supersaver). */
@@ -129,7 +131,7 @@ export async function ojpFares(refs: string[], halfFare: boolean, signal?: Abort
     }
   };
   await Promise.all([worker(), worker(), worker()]);
-  if (!out.available) out.fares = {};
+  // Prices found before access was denied are still good: keep them.
   return out;
 }
 
@@ -187,6 +189,7 @@ const fareCacheKey = (ref: string, halfFare: boolean) => `${ref}:${halfFare ? "h
 function cachedFare(ref: string, halfFare: boolean): NovaFare | null | undefined {
   const hit = fares.get(fareCacheKey(ref, halfFare));
   if (hit && hit.expires > Date.now()) return hit.fare;
+  if (hit) fares.delete(fareCacheKey(ref, halfFare));
   return tripXml(ref) ? undefined : null; // server restarted or stale: client re-searches
 }
 
@@ -217,6 +220,11 @@ async function priceTrip(ref: string, halfFare: boolean, signal?: AbortSignal): 
     },
   );
   const fare = parseFareDelivery(parseOjp(raw), halfFare);
+  if (fares.size >= MAX_FARES) {
+    // Drop expired prices, then the oldest (a Map iterates in insertion order).
+    const now = Date.now();
+    for (const [k, v] of fares) if (v.expires < now || fares.size >= MAX_FARES) fares.delete(k);
+  }
   fares.set(cacheKey, { fare, expires: Date.now() + FARE_TTL });
   return fare;
 }

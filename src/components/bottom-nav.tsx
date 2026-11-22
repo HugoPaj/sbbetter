@@ -37,7 +37,7 @@ export function BottomNav() {
   const active = TABS[activeIndex];
   /** Centre of the active tab, measured from the bar's left edge. */
   const cx = `(${PAD}px + (100% - ${2 * PAD}px) * ${(activeIndex + 0.5) / TABS.length})`;
-  const slide = "transition-[left,width] duration-200 ease-out";
+  const slide = "transition-[left,width] duration-200 ease-out motion-reduce:transition-none";
 
   return (
     <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 light:drop-shadow-[0_-1px_8px_rgba(0,0,0,0.12)] lg:hidden">

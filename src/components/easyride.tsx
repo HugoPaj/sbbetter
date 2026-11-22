@@ -22,6 +22,8 @@ type Summary = {
   charged: number;
   pass: string | null;
   price: number;
+  /** Priced with the traveller's Half Fare Travelcard. */
+  halfFare: boolean;
   from: string;
   start: number;
   end: number;
@@ -100,13 +102,15 @@ function useEasyRide() {
       from: parseSpot(startedAt),
       to: here,
     });
-    // MOCK fare: short-distance price plus a little per minute, half fare.
-    const price = charged ? Math.ceil((2.3 + Math.max(0, charged - 10) * 0.22) * 5) / 5 : 0;
+    // MOCK fare: short-distance price plus a little per minute (at half fare), doubled without a Half Fare Travelcard.
+    const half = 2.3 + Math.max(0, charged - 10) * 0.22;
+    const price = charged ? Math.ceil((passes.halfFare ? half : half * 2) * 5) / 5 : 0;
     const summary = {
       minutes,
       charged,
       pass,
       price,
+      halfFare: passes.halfFare,
       from: from || "Current location",
       start: checkedInAt,
       end,
@@ -237,6 +241,7 @@ export function useRiding(): boolean {
 
 function SetupSheet({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [accepted, setAccepted] = useState(false);
+  const passes = usePasses();
   return (
     <Sheet title="Set up EasyRide" onClose={onClose}>
       <ol className="space-y-2 px-1 text-[14.5px] leading-snug font-light text-fg/85">
@@ -246,7 +251,7 @@ function SetupSheet({ onClose, onDone }: { onClose: () => void; onDone: () => vo
       </ol>
       <Card className="mt-4 space-y-2 p-4">
         <InfoLine label="Class" value="2nd class" />
-        <InfoLine label="Reduction" value="Half Fare Travelcard" />
+        <InfoLine label="Reduction" value={passes.halfFare ? "Half Fare Travelcard" : "None"} />
         <InfoLine label="Payment" value="Default means of payment (Wallet)" />
         <InfoLine label="Location" value="Used while checked in" />
       </Card>
@@ -269,7 +274,7 @@ function SummarySheet({ summary, onClose }: { summary: Summary; onClose: () => v
       <Card className="space-y-2 p-4">
         <InfoLine label="Checked in at" value={summary.from} />
         <InfoLine label="Duration" value={`${summary.minutes} min`} />
-        <InfoLine label="Class" value="2nd class, Half Fare" />
+        <InfoLine label="Class" value={summary.halfFare ? "2nd class, Half Fare" : "2nd class"} />
         {summary.pass && <InfoLine label={`Covered by ${summary.pass}`} value={summary.charged ? `${summary.minutes - summary.charged} of ${summary.minutes} min` : "Whole journey"} />}
         <div className="border-t border-line pt-2">
           <InfoLine label={<b className="font-bold text-fg">Price</b>} value={<b className="font-bold">CHF {summary.price.toFixed(2)}</b>} />

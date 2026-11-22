@@ -36,11 +36,12 @@ const RANGE = "M0 478L40 430l26 16 66-80 38 54 26-22 36 42 30-32 40-28 44 56 26-
 function Tile({ children }: { children: ReactNode }) {
   return (
     <>
-      <g transform="translate(-800 0)">{children}</g>
-      <g transform="matrix(-1 0 0 1 0 0)">{children}</g>
+      {/* The copies are off screen on a phone (globals.css stops their animations there). */}
+      <g className="sc-copy" transform="translate(-800 0)">{children}</g>
+      <g className="sc-copy" transform="matrix(-1 0 0 1 0 0)">{children}</g>
       {children}
-      <g transform="matrix(-1 0 0 1 800 0)">{children}</g>
-      <g transform="translate(800 0)">{children}</g>
+      <g className="sc-copy" transform="matrix(-1 0 0 1 800 0)">{children}</g>
+      <g className="sc-copy" transform="translate(800 0)">{children}</g>
     </>
   );
 }
@@ -648,7 +649,7 @@ export function EmptyState({
     <div className="relative flex-1 overflow-hidden">
       <Scene variant={variant} />
       <div
-        className="relative mx-[8.5px] mt-(--top) rounded-[19px] bg-[#10141d]/55 px-2 pt-[12.5px] text-white light:bg-white/80 light:text-fg pb-4 text-center backdrop-blur-[2px] lg:mx-auto lg:mt-10 lg:max-w-[520px] lg:px-6 lg:pt-4 lg:pb-5"
+        className="relative mx-[8.5px] mt-(--top) rounded-[19px] bg-[#10141d]/70 px-2 pt-[12.5px] text-white light:bg-white/85 light:text-fg pb-4 text-center lg:mx-auto lg:mt-10 lg:max-w-[520px] lg:px-6 lg:pt-4 lg:pb-5"
         style={{ "--top": `${top}px` } as CSSProperties}
       >
         <h2 className="text-[16px] font-bold">{title}</h2>

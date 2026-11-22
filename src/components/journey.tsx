@@ -170,11 +170,13 @@ export function ConnectionCard({
             way. A travelcard shows as a green card + amount; the connection page names the card. */}
         {price !== undefined && (
           <span
-            title={pass ? passTag(pass) : undefined}
+            title={pass ? passTag(pass) : fare?.source === "estimate" ? "Estimated price" : undefined}
             className="relative z-0 -mt-[15px] -mr-[15px] ml-auto flex h-[21px] shrink-0 items-baseline gap-[3.5px] self-start pr-[12px] pl-3.5 text-[12px] leading-[21px] font-bold whitespace-nowrap before:absolute before:inset-0 before:-right-1.75 before:-z-10 before:origin-top before:skew-x-[14deg] before:rounded-bl-[7.5px] before:border-b before:border-l before:border-fg/40"
           >
             {pass && <IdCard aria-hidden className="size-[13px] self-center text-ok" strokeWidth={2} />}
-            <span>{!pass && "from "}CHF</span>
+            <span>
+              {!pass && (fare?.source === "estimate" ? <abbr title="Estimated price" className="no-underline">≈ </abbr> : "from ")}CHF
+            </span>
             <span className={cn("text-[15.5px]", pass && "text-ok")}>{price.toFixed(2)}</span>
             {pass && <span className="sr-only">{passTag(pass)}</span>}
           </span>

@@ -8,7 +8,7 @@ import { Card, InfoLine, OutlineButton, PillLink, PillToggle, PrimaryButton, Rad
 import { LocationPicker } from "@/components/plan/location-picker";
 import { CURRENT_LOCATION } from "@/lib/use-position";
 import { actions, useAppState, useSetting, type Ticket } from "@/lib/store";
-import { formatDate, formatTime } from "@/lib/format";
+import { endOfServiceDay, formatDate, formatTime } from "@/lib/format";
 import { DogIcon, TicketIcon } from "@/components/icons";
 import { fullName } from "@/lib/mock-data";
 import { usePasses } from "@/lib/travelcards";
@@ -179,7 +179,8 @@ function useNearestStop(): string | null {
   // Rounded so small GPS jitter doesn't refetch.
   const at = `${pos.lat.toFixed(3)},${pos.lon.toFixed(3)}`;
   useEffect(() => {
-    if (!pos.settled) return;
+    // The demo fallback position isn't where the traveller is.
+    if (!pos.real) return;
     let live = true;
     nearbyStations(pos.lat, pos.lon)
       .then((s) => live && setFound({ at, name: s[0]?.name ?? null }))
@@ -188,7 +189,7 @@ function useNearestStop(): string | null {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `at` covers the position.
-  }, [at, pos.settled]);
+  }, [at, pos.real]);
   return found?.at === at ? found.name : null;
 }
 
@@ -202,7 +203,7 @@ function ProductSheet({ product, place, onClose, onBought }: { product: Product;
   // Bought now, it is valid from now and (local tickets) around here: if a travelcard already covers that in 2nd class, don't sell it.
   const [openedAt] = useState(() => Date.now());
   const here = usePosition();
-  const local = product.travel === "local" ? here : null;
+  const local = product.travel === "local" && here.real ? here : null;
   const coveredBy =
     product.travel && klass === "2"
       ? product.minutes
@@ -213,9 +214,7 @@ function ProductSheet({ product, place, onClose, onBought }: { product: Product;
   function buy() {
     if (parking && !plate.trim()) return toast("Please enter your licence plate.");
     const start = new Date();
-    const end = new Date(start);
-    if (product.minutes) end.setMinutes(end.getMinutes() + product.minutes);
-    else end.setHours(23, 59, 59);
+    const end = product.minutes ? new Date(start.getTime() + product.minutes * 60_000) : endOfServiceDay(start);
     actions.addTicket({
       id: `t-${start.getTime()}`,
       product: product.label,

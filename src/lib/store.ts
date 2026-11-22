@@ -89,9 +89,20 @@ function save(next: State) {
   listeners.forEach((l) => l());
 }
 
+/** Another tab saved: drop the in-memory copy so the next read (and save) starts from theirs. */
+function onStorage(e: StorageEvent) {
+  if (e.key !== KEY && e.key !== null) return;
+  state = null;
+  listeners.forEach((l) => l());
+}
+
 function subscribe(l: () => void) {
+  if (!listeners.size) window.addEventListener("storage", onStorage);
   listeners.add(l);
-  return () => listeners.delete(l);
+  return () => {
+    listeners.delete(l);
+    if (!listeners.size) window.removeEventListener("storage", onStorage);
+  };
 }
 
 export function useAppState(): State {

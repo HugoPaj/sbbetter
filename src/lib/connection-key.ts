@@ -55,7 +55,11 @@ export function rememberConnections(list: Connection[]) {
 export async function fetchConnection(q: JourneyQuery, key: string | null, signal?: AbortSignal, opts: { track?: boolean } = {}): Promise<Connection | null> {
   const list = await getConnections({ ...toConnectionsRequest(q), limit: 4, track: opts.track }, signal);
   rememberConnections(list);
-  return list.find((c) => connectionKey(c) === key) ?? list[0] ?? null;
+  if (!key) return list[0] ?? null;
+  // Never substitute another train for the one asked for: same key, else the same trains from
+  // the same stops (times shifted by a timetable update), else nothing.
+  const legs = (k: string) => /^[^-]*-[^-]*-(.*)$/.exec(k)?.[1] ?? k;
+  return list.find((c) => connectionKey(c) === key) ?? list.find((c) => legs(connectionKey(c)) === legs(key)) ?? null;
 }
 
 /**

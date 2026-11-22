@@ -28,9 +28,10 @@ export const viewport: Viewport = {
 
 /**
  * Runs while the HTML is parsed, so the right theme is there for the first paint:
- * the stored choice ("sbb-theme", see lib/theme.ts), else the device setting.
+ * the stored choice ("sbb-theme", see lib/theme.ts), else the device setting. It also points the
+ * manifest link at the one whose splash colour matches (see lib/app-manifest.ts).
  */
-const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){}`;
+const THEME_SCRIPT = `try{var t=localStorage.getItem("sbb-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;var m=document.querySelector('link[rel="manifest"]');if(m)m.setAttribute("href",t==="light"?"/manifest-light.webmanifest":"/manifest.webmanifest")}catch(e){}`;
 
 /**
  * Installed on an iPhone home screen, works around two WebKit bugs (iOS 26+). The page is

@@ -424,6 +424,12 @@ body {
     animation: none !important;
   }
 }
+/* Phones show only the middle of the tiled panorama: don't animate the copies off screen. */
+@media (max-width: 1023px) {
+  .scene .sc-copy * {
+    animation: none;
+  }
+}
 
 @keyframes sheet-up {
   from {
@@ -566,5 +572,12 @@ body {
   from {
     opacity: 0;
     transform: translateY(10px) scale(0.98);
+  }
+}
+
+/* Reduced motion (last, so it wins over the desktop pop-in too): sheets just fade in. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-up {
+    animation: fade-in 160ms ease-out;
   }
 }

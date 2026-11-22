@@ -4,7 +4,7 @@ import { Bell, Car, SunMoon, CircleHelp, CircleUserRound, IdCard, Newspaper, Sec
 import { useState } from "react";
 import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
-import { actions, useSetting } from "@/lib/store";
+import { useSetting } from "@/lib/store";
 import { ProfileSheets, type ProfileSheet } from "./sheets";
 import { SERVICES, ServiceSheet } from "@/components/shop";
 
@@ -66,10 +66,8 @@ export default function ProfilePage() {
             {loggedOut ? "Log in" : "Log out"}
           </button>
           <button
-            onClick={() => {
-              actions.reset();
-              toast("Demo data reset: tickets, trips and settings restored.");
-            }} className="flex h-[32px] items-center rounded-full px-2.5 text-[12px] font-light text-muted">
+            onClick={() => setSheet("reset")}
+            className="flex h-[32px] items-center rounded-full px-2.5 text-[12px] font-light text-muted">
             Reset demo data
           </button>
         </div>

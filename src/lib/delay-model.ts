@@ -124,7 +124,16 @@ export function estimate(model: DelayModel, section: Section, weather: Weather |
 let loading: Promise<DelayModel> | null = null;
 /** The model is ~MBs, so it is fetched once, lazily, from /public. */
 export function loadDelayModel(): Promise<DelayModel> {
-  loading ??= fetch("/delay-model.json").then((r) => r.json());
+  loading ??= fetch("/delay-model.json")
+    .then((r) => {
+      if (!r.ok) throw new Error(`delay model: HTTP ${r.status}`);
+      return r.json() as Promise<DelayModel>;
+    })
+    .catch((e) => {
+      // Forget the failure (e.g. briefly offline) so the next forecast tries again.
+      loading = null;
+      throw e;
+    });
   return loading;
 }
 
@@ -144,13 +153,20 @@ export async function weatherAt(coordinate: { x: number | null; y: number | null
     forecasts.set(
       key,
       fetch(url)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error(`weather: HTTP ${r.status}`);
+          return r.json();
+        })
         .then(({ hourly: h }) =>
           Object.fromEntries(
             (h.time as string[]).map((t, i) => [t, { rain: h.precipitation[i], snow: h.snowfall[i], temp: h.temperature_2m[i], gust: h.wind_gusts_10m[i] }]),
           ),
         )
-        .catch(() => ({})),
+        .catch(() => {
+          // No weather this time; ask again on the next forecast.
+          forecasts.delete(key);
+          return {};
+        }),
     );
   }
   const hour = new Intl.DateTimeFormat("sv-SE", { ...ZH, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })

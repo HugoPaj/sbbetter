@@ -40,11 +40,30 @@ export type Catalog = { zonePasses: ZonePassMeta[]; areaPasses: { id: string; na
 
 type PassFile = { edges: Record<string, string[]> | string[]; stopZone?: Record<string, string>; coords: Record<string, [number, number]> };
 
+/** Fetch JSON, failing on HTTP errors (a 404 page isn't data). */
+const getJson = <T,>(url: string): Promise<T> =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+    return r.json() as Promise<T>;
+  });
+
+// Cached once loaded; a failure (offline on a train) is forgotten so the next use tries again.
 let catalog: Promise<Catalog> | null = null;
-export const loadCatalog = (): Promise<Catalog> => (catalog ??= fetch("/passes/index.json").then((r) => r.json()));
+export const loadCatalog = (): Promise<Catalog> =>
+  (catalog ??= getJson<Catalog>("/passes/index.json").catch((e) => {
+    catalog = null;
+    throw e;
+  }));
 const files = new Map<string, Promise<PassFile>>();
 const loadFile = (id: string) => {
-  if (!files.has(id)) files.set(id, fetch(`/passes/${id}.json`).then((r) => r.json()));
+  if (!files.has(id))
+    files.set(
+      id,
+      getJson<PassFile>(`/passes/${id}.json`).catch((e) => {
+        files.delete(id);
+        throw e;
+      }),
+    );
   return files.get(id)!;
 };
 

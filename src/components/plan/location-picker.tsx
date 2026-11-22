@@ -30,7 +30,8 @@ export function LocationPicker({
   mapMode?: "point" | "stop";
 }) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<Location[]>([]);
+  /** The last answered search: its query, the stops found, or that it failed. */
+  const [results, setResults] = useState<{ q: string; items: Location[]; failed: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [onMap, setOnMap] = useState(false);
   const { recentStops } = useAppState();
@@ -41,14 +42,15 @@ export function LocationPicker({
   };
 
   useEffect(() => {
-    if (q.trim().length < 2) return;
+    const query = q.trim();
+    if (query.length < 2) return;
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       setLoading(true);
-      searchLocations(q, ctrl.signal)
-        .then(setResults)
-        .catch(() => {})
-        .finally(() => setLoading(false));
+      searchLocations(query, ctrl.signal)
+        .then((items) => setResults({ q: query, items, failed: false }))
+        .catch((e: Error) => e.name !== "AbortError" && setResults({ q: query, items: [], failed: true }))
+        .finally(() => !ctrl.signal.aborted && setLoading(false));
     }, 200);
     return () => {
       clearTimeout(t);
@@ -56,7 +58,11 @@ export function LocationPicker({
     };
   }, [q]);
 
-  const shown = q.trim().length < 2 ? [] : results;
+  const typed = q.trim();
+  // While the next search runs, the previous matches stay; a failed search clears them.
+  const shown = typed.length < 2 ? [] : (results?.items ?? []);
+  /** Said once the search for exactly what is typed has answered. */
+  const answered = typed.length >= 2 && !loading && results?.q === typed;
   const ref = useEscape(onClose);
 
   return (
@@ -132,6 +138,10 @@ export function LocationPicker({
               <span>{s.name}</span>
             </Row>
           ))}
+          {answered && results.failed && <li className="px-[15px] py-3.5 text-[14.5px] font-light text-muted">Could not search stops. Check your connection and try again.</li>}
+          {answered && !results.failed && !results.items.length && (
+            <li className="px-[15px] py-3.5 text-[14.5px] font-light text-muted">No stops found for &ldquo;{typed}&rdquo;.</li>
+          )}
         </ul>
         </div>
       </div>
