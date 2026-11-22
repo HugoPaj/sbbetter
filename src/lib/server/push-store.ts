@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { neon } from "@neondatabase/serverless";
 import path from "node:path";
 import type { PushSubscription } from "web-push";
 import type { Commute } from "../store";
@@ -6,9 +7,10 @@ import type { Commute } from "../store";
 /**
  * Who gets commute alerts: each browser's push subscription with its commute.
  *
- * Kept in Upstash Redis (also what Vercel KV is) when UPSTASH_REDIS_REST_URL /
- * KV_REST_API_URL is set, which serverless hosting needs. Otherwise in a JSON
- * file in .data/, which is enough for a self-hosted `next start`.
+ * Serverless hosting needs a database: Postgres (Neon) when DATABASE_URL /
+ * POSTGRES_URL is set, or Upstash Redis (also what Vercel KV is) when
+ * UPSTASH_REDIS_REST_URL / KV_REST_API_URL is set. Otherwise a JSON file in
+ * .data/, which is enough for a self-hosted `next start`.
  */
 export type PushRecord = {
   subscription: PushSubscription;
@@ -55,6 +57,39 @@ function redisStore(url: string, token: string): PushStore {
   };
 }
 
+/** Postgres over Neon's HTTP driver: one row per subscription, the record as JSON. */
+function postgresStore(url: string): PushStore {
+  const sql = neon(url);
+  let ready: Promise<unknown> | null = null;
+  const table = () =>
+    (ready ??= sql`CREATE TABLE IF NOT EXISTS commute_alerts (endpoint text PRIMARY KEY, record jsonb NOT NULL)`.catch((e) => {
+      ready = null;
+      throw e;
+    }));
+  return {
+    async all() {
+      await table();
+      const rows = await sql`SELECT record FROM commute_alerts`;
+      return rows.map((r) => r.record as PushRecord);
+    },
+    async get(endpoint) {
+      await table();
+      const rows = await sql`SELECT record FROM commute_alerts WHERE endpoint = ${endpoint}`;
+      return (rows[0]?.record as PushRecord | undefined) ?? null;
+    },
+    async put(r) {
+      await table();
+      const json = JSON.stringify(r);
+      await sql`INSERT INTO commute_alerts (endpoint, record) VALUES (${r.subscription.endpoint}, ${json}::jsonb)
+        ON CONFLICT (endpoint) DO UPDATE SET record = EXCLUDED.record`;
+    },
+    async remove(endpoint) {
+      await table();
+      await sql`DELETE FROM commute_alerts WHERE endpoint = ${endpoint}`;
+    },
+  };
+}
+
 function fileStore(file: string): PushStore {
   // One writer at a time: each change reads, edits and replaces the whole file.
   let queue: Promise<unknown> = Promise.resolve();
@@ -83,16 +118,22 @@ function fileStore(file: string): PushStore {
 
 let store: PushStore | null = null;
 
+const postgresUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL;
 const redisUrl = () => process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = () => process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-/** Whether subscriptions can be kept here: serverless hosting (Vercel) has no lasting disk, so it needs Redis. */
-export const pushStoreAvailable = () => !!(redisUrl() && redisToken()) || !process.env.VERCEL;
+/** Whether subscriptions can be kept here: serverless hosting (Vercel) has no lasting disk, so it needs a database. */
+export const pushStoreAvailable = () => !!postgresUrl() || !!(redisUrl() && redisToken()) || !process.env.VERCEL;
 
 export function pushStore(): PushStore {
   if (store) return store;
+  const pg = postgresUrl();
   const url = redisUrl();
   const token = redisToken();
-  store = url && token ? redisStore(url, token) : fileStore(path.join(process.cwd(), ".data", "commute-alerts.json"));
+  store = pg
+    ? postgresStore(pg)
+    : url && token
+      ? redisStore(url, token)
+      : fileStore(path.join(process.cwd(), ".data", "commute-alerts.json"));
   return store;
 }

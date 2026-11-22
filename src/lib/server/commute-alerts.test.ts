@@ -40,6 +40,8 @@ beforeEach(() => {
   vi.stubEnv("VAPID_PRIVATE_KEY", "priv");
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
   vi.stubEnv("KV_REST_API_URL", "");
+  vi.stubEnv("DATABASE_URL", "");
+  vi.stubEnv("POSTGRES_URL", "");
   vi.spyOn(process, "cwd").mockReturnValue(mkdtempSync(path.join(tmpdir(), "alerts-")));
   sent.length = 0;
   gone = new Set();

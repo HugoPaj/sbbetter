@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "fast-xml-parser": "^5.12.1",
     "lucide-react": "^1.77.0",
     "maplibre-gl": "^6.19.0",

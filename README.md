@@ -121,8 +121,9 @@ Setup: put a VAPID key pair in `.env.local` (see `.env.example`). Then:
 
 - **Self-hosted** (`pnpm build && pnpm start`): the server checks every 5 minutes by itself
   (`src/instrumentation.ts`); subscriptions are kept in `.data/commute-alerts.json`.
-- **Serverless (Vercel)**: there is no long-running process and no lasting disk. Add Upstash Redis
-  (Vercel KV) and set `UPSTASH_REDIS_REST_URL`/`_TOKEN` (or `KV_REST_API_URL`/`_TOKEN`), set
+- **Serverless (Vercel)**: there is no long-running process and no lasting disk. Add Postgres (Neon,
+  which sets `DATABASE_URL`; the table is created on first use) or Upstash Redis (Vercel KV:
+  `UPSTASH_REDIS_REST_URL`/`_TOKEN` or `KV_REST_API_URL`/`_TOKEN`), set
   `CRON_SECRET`, and call `GET /api/push/check` with `Authorization: Bearer $CRON_SECRET` every
   5 minutes. Vercel Cron does that on Pro; on Hobby it runs at most daily, so use an external
   scheduler (a GitHub Actions schedule, cron-job.org…).
