@@ -156,7 +156,7 @@ export function Overlap({
       cancelAnimationFrame(frame);
       scroller.removeEventListener("scroll", onScroll);
     };
-  }, [gap, blur]);
+  }, [sticky, gap, blur]);
   if (!sticky) return <div className={cn("relative z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>{children}</div>;
   return (
     <div className={cn("sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>

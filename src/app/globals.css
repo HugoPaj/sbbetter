@@ -126,6 +126,20 @@ body {
   font-family: var(--font-sans);
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  /* App-like: no text selection or long-press callout on UI chrome. Opt back in with
+     Tailwind's `select-text` where copying makes sense. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Fields must stay selectable (caret, paste, select-all) and keep the iOS edit menu. */
+input,
+textarea,
+[contenteditable]:not([contenteditable="false"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Phones: the document is locked to one screen; the app column (#app-scroll) scrolls instead,
