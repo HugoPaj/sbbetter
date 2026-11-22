@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
   // Tabs folded into others: Trips, Shop and EasyRide into Plan (Upcoming, Other tickets).
   async redirects() {
     return [
+      // The home is Plan; config redirects carry the query along (e.g. /?replay=…).
+      { source: "/", destination: "/plan", permanent: false },
       { source: "/trips", destination: "/plan", permanent: false },
       { source: "/shop", destination: "/plan", permanent: false },
       { source: "/easyride", destination: "/plan", permanent: false },

@@ -34,7 +34,17 @@ export function RouteMap({ lines, points, className }: { lines: RouteLine[]; poi
       });
       const ro = new ResizeObserver(() => map?.resize());
       ro.observe(container.current);
-      map.once("remove", () => ro.disconnect());
+      // Redraw once the sheet has finished sliding in (iOS can skip frames drawn mid-animation).
+      const sheet = container.current.closest(".animate-sheet-up");
+      const settle = () => {
+        map?.resize();
+        map?.triggerRepaint();
+      };
+      sheet?.addEventListener("animationend", settle);
+      map.once("remove", () => {
+        ro.disconnect();
+        sheet?.removeEventListener("animationend", settle);
+      });
       map.on("load", () => {
         const attrib = map!.getContainer().querySelector(".maplibregl-ctrl-attrib");
         attrib?.classList.remove("maplibregl-compact-show");
@@ -105,7 +115,13 @@ export function RouteMap({ lines, points, className }: { lines: RouteLine[]; poi
   }, []);
 
   return (
-    <div className={`route-map relative overflow-hidden rounded-[19px] bg-surface ${className ?? ""}`}>
+    // iOS Safari drops the WebGL canvas entirely when it sits under a rounded `overflow: hidden`
+    // box inside a scrolling, transformed sheet (only the DOM controls still show). Giving the
+    // wrapper its own layer with a mask makes WebKit clip the canvas properly instead.
+    <div
+      className={`route-map relative isolate overflow-hidden rounded-[19px] bg-surface ${className ?? ""}`}
+      style={{ transform: "translateZ(0)", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+    >
       <div ref={container} className="size-full" />
     </div>
   );
