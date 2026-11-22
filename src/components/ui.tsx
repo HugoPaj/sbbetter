@@ -166,8 +166,6 @@ export function Overlap({
       className={cn("sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-10 -mt-6 px-[8.5px] lg:mt-6", className)}
       style={{ "--tail": `${blur ? tail : 0}px` } as CSSProperties}
     >
-      {/* At rest this lies exactly on the header's skirt; scrolled, it stays when the real one has gone. */}
-      <div aria-hidden className="absolute inset-x-0 -top-[5.5px] h-[29.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
       {/* Page colour behind the rest, so what scrolls under never shows around the rounded corners. */}
       {/* With `blur`, it fades out just above the card's bottom edge, so the blur below can wrap up around the corners. */}
       <div
@@ -195,6 +193,9 @@ export function Overlap({
           className="card-halo-mask pointer-events-none absolute inset-x-0 top-[calc(100%-var(--tail)-43px)] h-[calc(var(--tail)+75.5px)] bg-page/40 opacity-0 backdrop-blur-[6px] lg:hidden"
         />
       )}
+      {/* At rest this lies exactly on the header's skirt; scrolled, it stays when the real one has gone.
+          Painted after the blur: on a short card the blur's halo reaches up into the skirt, and must not dim it. */}
+      <div aria-hidden className="absolute inset-x-0 -top-[5.5px] h-[29.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
       {fade && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-page from-50% to-transparent lg:hidden" />}
       <div className="relative">{children}</div>
     </div>
