@@ -368,7 +368,8 @@ function useDrag() {
   /** Keeps the whole dock on screen: after a drag, opening it (it grows), or a resize. */
   function clamp(o: Offset): Offset {
     const r = ref.current?.getBoundingClientRect();
-    if (!r) return o;
+    // Not laid out (hidden while the page changes): nothing to keep on screen, and nudging would never settle.
+    if (!r || r.width === 0 || r.height === 0) return o;
     const left = r.left - off.x + o.x;
     const top = r.top - off.y + o.y;
     const dx = Math.max(MARGIN - left, Math.min(0, window.innerWidth - MARGIN - (left + r.width)));
