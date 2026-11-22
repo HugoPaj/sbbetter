@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Search, Trash2 } from "lucide-react";
 import { Card, Checkbox, InfoLine, OutlineButton, PrimaryButton, Radio, Sheet, Toggle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { actions, useAppState, useSetting } from "@/lib/store";
-import { checkCommuteNow, currentSubscription, disableCommuteAlerts, enableCommuteAlerts, pushSupport } from "@/lib/push";
+import { checkCommuteNow, commuteAlertsOn, disableCommuteAlerts, enableCommuteAlerts, pushSupport } from "@/lib/push";
 import { THEME_OPTIONS, setTheme, useThemeChoice } from "@/lib/theme";
 import { NATIONAL, travelcardNames, useCatalog, useTravelcards, type NationalId, type ZonePassMeta } from "@/lib/travelcards";
 
@@ -47,8 +47,8 @@ function CommuteAlerts() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let live = true;
-    currentSubscription()
-      .then((s) => live && setOn(!!s))
+    commuteAlertsOn()
+      .then((on) => live && setOn(on))
       .catch(() => live && setOn(false));
     return () => {
       live = false;

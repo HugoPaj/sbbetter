@@ -1,6 +1,6 @@
 "use client";
 
-import type { Commute } from "./store";
+import { actions, readState, type Commute } from "./store";
 
 /**
  * Commute alerts in the browser: subscribe this device to push notifications
@@ -33,6 +33,18 @@ async function registration(): Promise<ServiceWorkerRegistration | null> {
   return (await navigator.serviceWorker.getRegistration()) ?? null;
 }
 
+/**
+ * Setting: this device was subscribed by a replay (to get its updates by push), not by turning on
+ * commute alerts. The server has no commute for it then, and the Profile switch shows alerts off.
+ */
+const REPLAY_ONLY = "pushReplayOnly";
+const replayOnly = () => !!readState().settings[REPLAY_ONLY];
+
+/** Commute alerts are on for this device (Profile → Notifications). */
+export async function commuteAlertsOn(): Promise<boolean> {
+  return !!(await currentSubscription()) && !replayOnly();
+}
+
 export async function currentSubscription(): Promise<PushSubscription | null> {
   return (await (await registration())?.pushManager.getSubscription()) ?? null;
 }
@@ -57,6 +69,7 @@ export async function enableCommuteAlerts(commute: Commute): Promise<void> {
   if ((await Notification.requestPermission()) !== "granted") throw new Error("Notifications are blocked. Allow them in your settings.");
   const subscription = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key(publicKey) }));
   await json(await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription, commute }) }));
+  actions.setSetting(REPLAY_ONLY, false);
 }
 
 export async function disableCommuteAlerts(): Promise<void> {
@@ -69,7 +82,7 @@ export async function disableCommuteAlerts(): Promise<void> {
 /** After the commute is edited or deleted: update the alerts, or stop them. Quiet when alerts are off. */
 export async function syncCommuteAlerts(commute: Commute | null): Promise<void> {
   const sub = await currentSubscription().catch(() => null);
-  if (!sub) return;
+  if (!sub || replayOnly()) return;
   if (!commute) return disableCommuteAlerts();
   await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub, commute }) }).catch(() => {});
 }
@@ -83,23 +96,36 @@ export async function checkCommuteNow(): Promise<string> {
 }
 
 /**
- * Ask to show notifications, without subscribing to push. Call it straight from a tap
- * (iOS ignores the request otherwise). Quiet when it can't ask: not installed, no worker, already answered.
+ * Get this device ready for replay notifications: ask to show them, and subscribe it to push (so
+ * updates come from the server, which iOS shows even while the app is open). Call it straight from
+ * a tap: iOS only asks then. Quiet when it can't: not installed, no worker, not allowed, no server key.
  */
 export async function askToNotify(): Promise<void> {
-  if (pushSupport() !== "ok" || Notification.permission !== "default") return;
-  await Notification.requestPermission().catch(() => {});
+  if (pushSupport() !== "ok") return;
+  // First thing in the tap: an await before it would lose the tap on iOS.
+  if (Notification.permission === "default") await Notification.requestPermission().catch(() => {});
+  if (Notification.permission !== "granted") return;
+  try {
+    const reg = await registration();
+    if (!reg || (await reg.pushManager.getSubscription())) return;
+    const { publicKey } = await json(await fetch("/api/push"));
+    if (!publicKey) return;
+    await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key(publicKey) });
+    actions.setSetting(REPLAY_ONLY, true);
+  } catch {
+    // The local notification (or the banner) stands in.
+  }
 }
 
 /**
  * A demo notification (replay updates), as real as this device allows: through the server
- * and the push service when it is subscribed (commute alerts on), else shown locally by the
+ * and the push service when it is subscribed (see askToNotify), else shown locally by the
  * worker. False when neither works, so the caller shows its own banner.
  */
 export async function notify(n: { title: string; body: string; url: string; tag: string }): Promise<boolean> {
   const sub = await currentSubscription().catch(() => null);
   if (sub && Notification.permission === "granted") {
-    const res = await fetch("/api/push/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint, ...n }) }).catch(() => null);
+    const res = await fetch("/api/push/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub, ...n }) }).catch(() => null);
     if (res?.ok) return true;
   }
   return notifyHere(n);

@@ -2,6 +2,7 @@ import { connection, type NextRequest } from "next/server";
 import type { Commute } from "@/lib/store";
 import { pushEnabled } from "@/lib/server/commute-alerts";
 import { pushStore } from "@/lib/server/push-store";
+import { isSubscription, type Sub } from "@/lib/server/push-subscription";
 
 /**
  * Commute alert subscriptions.
@@ -27,21 +28,6 @@ function commuteOf(v: unknown): Commute | null {
     ? { from: c.from, fromName: c.fromName, to: c.to, toName: c.toName, outTime: c.outTime, backTime: c.backTime }
     : null;
 }
-
-/** The browsers' push services (Chrome/Edge/Android, Firefox, Safari, Windows). We POST to the endpoint, so it must not be any URL a caller likes. */
-const PUSH_HOSTS = /(^|\.)(googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/;
-const isPushEndpoint = (v: string) => {
-  try {
-    const u = new URL(v);
-    return u.protocol === "https:" && !u.port && !u.username && PUSH_HOSTS.test(u.hostname);
-  } catch {
-    return false;
-  }
-};
-
-type Sub = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
-const isSubscription = (s: Sub | undefined) =>
-  !!s && typeof s.endpoint === "string" && s.endpoint.length < 1000 && isPushEndpoint(s.endpoint) && isText(s.keys?.p256dh) && isText(s.keys?.auth);
 
 export async function POST(request: NextRequest) {
   if (!pushEnabled()) return Response.json({ error: "Push is not configured on this server." }, { status: 503 });

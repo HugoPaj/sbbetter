@@ -31,17 +31,17 @@ export type PushPayload = { title: string; body: string; url: string; tag: strin
 
 /** Sends one notification; false when the subscription is gone (unsubscribed, app removed), which is then forgotten. */
 async function send(record: PushRecord, alert: CommuteAlert): Promise<boolean> {
-  return sendPayload(record, { title: alert.title, body: alert.body, url: alert.url, tag: `commute-${alert.kind}` }, alert.kind === "ok" ? "normal" : "high");
+  return sendPayload(record.subscription, { title: alert.title, body: alert.body, url: alert.url, tag: `commute-${alert.kind}` }, alert.kind === "ok" ? "normal" : "high");
 }
 
-async function sendPayload(record: PushRecord, payload: PushPayload, urgency: "normal" | "high"): Promise<boolean> {
+async function sendPayload(subscription: PushRecord["subscription"], payload: PushPayload, urgency: "normal" | "high"): Promise<boolean> {
   configure();
   try {
-    await sendNotification(record.subscription, JSON.stringify(payload), { TTL: 30 * 60, urgency });
+    await sendNotification(subscription, JSON.stringify(payload), { TTL: 30 * 60, urgency });
     return true;
   } catch (e) {
     if (e instanceof WebPushError && (e.statusCode === 404 || e.statusCode === 410)) {
-      await pushStore().remove(record.subscription.endpoint);
+      await pushStore().remove(subscription.endpoint);
       return false;
     }
     throw e;
@@ -95,12 +95,12 @@ export async function checkNow(origin: string, endpoint: string): Promise<Commut
   return alert;
 }
 
-/** A replay update (demo) to a subscribed device, through its push service. False: not subscribed here. */
-export async function pushTo(endpoint: string, payload: PushPayload): Promise<boolean> {
-  const r = await pushStore().get(endpoint);
-  if (!r) return false;
-  if (!(await sendPayload(r, payload, "high"))) throw new GoneError();
-  return true;
+/**
+ * A replay update (demo) to the device that asked, through its push service: shown by iOS even
+ * while the app is open. Sent to the subscription the caller holds (its endpoint and keys).
+ */
+export async function pushTo(subscription: PushRecord["subscription"], payload: PushPayload): Promise<void> {
+  if (!(await sendPayload(subscription, payload, "high"))) throw new GoneError();
 }
 
 /** The device's subscription expired or was removed (it has been forgotten). */
