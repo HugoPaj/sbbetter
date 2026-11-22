@@ -2,9 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { ChevronDown, Ticket, TriangleAlert } from "lucide-react";
-import { Skeleton, cn } from "@/components/ui";
+import { Card, Skeleton, cn } from "@/components/ui";
 import { disruptionEnd } from "@/lib/disruption-forecast";
-import { Backtest } from "@/components/replay";
 import { formatTime } from "@/lib/format";
 import { passNotice, type PassSaving } from "@/lib/pricing";
 import type { Disruption } from "@/lib/transport";
@@ -68,8 +67,62 @@ export function DisruptionNotices({ disruptions, planB, details }: { disruptions
           </ul>
         ))}
       {open && details}
-      {open && disruptions.some((d) => disruptionEnd(d)) && <Backtest className="mt-2 pl-7" />}
     </div>
+  );
+}
+
+/**
+ * Under a verdict's headline: what SBB says (the alert itself, or how many), and when it is
+ * likely over. Two short lines; everything else is in the sheet.
+ */
+export function AlertsLine({ disruptions }: { disruptions: Disruption[] }) {
+  const end = disruptions.map((d) => disruptionEnd(d)).find(Boolean);
+  const at = (ms: number) => formatTime(new Date(ms).toISOString());
+  return (
+    <>
+      <p className="mt-1 pl-7 text-[14.5px] leading-snug font-light">{disruptions.length === 1 ? disruptions[0].summary : `${disruptions.length} service alerts on your route`}</p>
+      {end && (
+        <p className="mt-0.5 pl-7 text-[13px] leading-snug font-light text-muted">
+          Likely over around {at(end.likely)}
+          {/* SBB's own time beside ours, so a change reads as a reaction to SBB's update. */}
+          {end.sbb && at(end.sbb) !== at(end.likely) && <> · SBB says {at(end.sbb)}</>}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The alerts in full, SBB's words, at the top of the disruption sheet. */
+export function AlertsCards({ disruptions, note }: { disruptions: Disruption[]; /** Where this comes from (e.g. a replay), under the cards. */ note?: string }) {
+  return (
+    <section>
+      <h3 className="pb-1.75 text-[13.5px] font-light tracking-tight">From SBB</h3>
+      <div className="space-y-2">
+        {disruptions.map((d, i) => (
+          <Card key={i} className="px-3.5 py-3">
+            <p className="text-[14.5px] leading-snug font-bold">{d.summary}</p>
+            {(d.description || d.reason) && <ReadMore text={(d.description || d.reason)!} />}
+          </Card>
+        ))}
+      </div>
+      {note && <p className="mt-2 text-[13px] leading-snug font-light text-muted">{note}</p>}
+    </section>
+  );
+}
+
+/** SBB's text, cut to three lines until "Read more" (their messages run to a dozen lines). */
+function ReadMore({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 160;
+  return (
+    <>
+      <p className={cn("mt-1 text-[14.5px] leading-snug font-light text-fg/80", long && !open && "line-clamp-3")}>{text}</p>
+      {long && (
+        <button onClick={() => setOpen((o) => !o)} className="mt-1 text-[14.5px] font-bold">
+          {open ? "Show less" : "Read more"}
+        </button>
+      )}
+    </>
   );
 }
 

@@ -162,10 +162,11 @@ export function ClosureDetails({
     <div className="mt-2.5 pl-7">
       <p className="text-[12px] font-bold tracking-wide text-muted uppercase">What usually happens next</p>
       <Steps steps={steps} start={start} className="mt-1.5" />
-      {detour && (
+      {/* Already the way round in the timeline: no need to say staff advised it too. */}
+      {detour && offeredVia !== detour.via && (
         <p className={cn(SUB, "mt-2")}>
           Staff sent travellers via {detour.via} {times(detour.n)} before
-          {detour.after !== null && `, about ${formatMinutes(detour.after)} into the disruption`}.{offeredVia === detour.via && " You have it now."}
+          {detour.after !== null && `, about ${formatMinutes(detour.after)} into the disruption`}.
         </p>
       )}
       {stretch && <TicketNote stretch={stretch} className="mt-2" />}
@@ -177,6 +178,51 @@ export function ClosureDetails({
       )}
       {open && stretch && <LineMemorySheet title="Past disruptions" memory={route.memory} stretch={stretch} conn={conn} query={query} history onClose={() => setOpen(false)} />}
     </div>
+  );
+}
+
+/**
+ * The same as ClosureDetails, laid out for a sheet: the usual order of events as rows in a card,
+ * like the facts of LineMemorySheet, and the stretch's history one tap further.
+ */
+export function ClosureOutlook({ route, conn, query, closure }: { route: RouteMemory; conn: Connection; query: JourneyQuery; closure: Closure }) {
+  const now = useNow();
+  const [open, setOpen] = useState(false);
+  if (now === null) return null;
+  const stretch = stretchOfClosure(route, closure);
+  const start = Date.parse(closure.start);
+  const elapsed = Math.max(0, (now * 1000 - start) / 60000);
+  const announced = closure.end ? (Date.parse(closure.end) - start) / 60000 : null;
+  const steps = scriptFor(route.memory, closure.cause, elapsed, announced).filter((s) => !s.done);
+  return (
+    <section className="mt-5">
+      <h3 className="pb-1.75 text-[13.5px] font-light tracking-tight">What usually happens next</h3>
+      <Card className="overflow-hidden">
+        <ul>
+          {steps.map((s) => (
+            <li key={s.key} className="flex items-baseline gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
+              <span className="w-[46px] shrink-0 text-[14.5px] font-light text-muted tabular-nums">~{clock(start + s.minutes * 60000)}</span>
+              <span className={cn("min-w-0 flex-1 text-[14.5px] leading-snug", s.key === "end" ? "font-bold" : "font-light")}>
+                {s.label}
+                {s.share !== null && s.key !== "end" && <span className="block text-[13px] text-muted">{inTen(s.share)} past cases</span>}
+              </span>
+            </li>
+          ))}
+          {stretch && stretch.ticketVia.length > 0 && (
+            <Fact icon={Ticket}>
+              Tickets were also valid via <B>{stretch.ticketVia.join(" or ")}</B>
+            </Fact>
+          )}
+        </ul>
+      </Card>
+      {stretch && stretch.n > 0 && (
+        <button onClick={() => setOpen(true)} className="mt-3 flex items-center gap-1 py-1 text-left text-[13.5px] font-light tracking-tight text-muted">
+          Past disruptions on this stretch
+          <ChevronRight className="size-3.5 shrink-0" strokeWidth={1.75} />
+        </button>
+      )}
+      {open && stretch && <LineMemorySheet title="Past disruptions" memory={route.memory} stretch={stretch} conn={conn} query={query} history onClose={() => setOpen(false)} />}
+    </section>
   );
 }
 

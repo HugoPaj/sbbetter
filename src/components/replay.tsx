@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronLeft, ChevronRight, CircleCheck, History, Lock, RotateCcw, Square, TriangleAlert, X, type LucideIcon } from "lucide-react";
+import { Bell, BellOff, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, History, Lock, RotateCcw, Square, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { Sheet, Skeleton, cn, toast } from "./ui";
 import { ConnectionCard } from "./journey";
 import { backtest, disruptionEnd } from "@/lib/disruption-forecast";
@@ -159,6 +159,9 @@ export function ReplayDock() {
   const trip = useWatched();
   const router = useRouter();
   const [sheet, setSheet] = useState<"replay" | "pick" | null>(null);
+  /** The dock's controls are shown (else just a small round button). */
+  const [open, setOpen] = useState(false);
+  const drag = useDrag();
   const [banner, setBanner] = useState<{ move: Move; trip: Watched; id: number } | null>(null);
 
   useEffect(() => {
@@ -230,32 +233,50 @@ export function ReplayDock() {
   return (
     <>
       {snap && u && (
-        <div className="fixed right-0 bottom-[calc(var(--home-inset)+133px)] left-0 z-40 mx-auto flex w-full max-w-[430px] justify-end px-[8.5px] lg:right-6 lg:bottom-6 lg:left-auto lg:w-auto">
-          <div className="flex items-center gap-1 rounded-full border border-fg/20 bg-[#262626]/95 py-1 pr-1 pl-3 shadow-lg shadow-black/50 backdrop-blur light:bg-white/95">
-            <button onClick={() => setSheet("replay")} className="flex min-w-0 items-center gap-2 text-left" aria-label="Open the replay">
-              <span className="relative flex size-2.5 shrink-0">
-                <span className="absolute inset-0 animate-ping rounded-full bg-sbb-red opacity-60" />
-                <span className="relative size-2.5 rounded-full bg-sbb-red" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[12.5px] leading-tight font-bold">
-                  Replay · {formatMinutes(snap.t)} in
+        <div className="pointer-events-none fixed right-0 bottom-[calc(var(--home-inset)+133px)] left-0 z-40 mx-auto flex w-full max-w-[430px] justify-end px-[8.5px] lg:right-6 lg:bottom-6 lg:left-auto lg:w-auto">
+          {/* Small by default, so it covers little of the screen; tap to open the controls. Drag to move it. */}
+          <div {...drag} className="pointer-events-auto touch-none select-none">
+            {!open ? (
+              <button
+                onClick={() => setOpen(true)}
+                aria-label={`Replay, ${formatMinutes(snap.t)} in: show the controls`}
+                className="relative flex size-11 items-center justify-center rounded-full border border-fg/20 bg-[#262626] shadow-lg shadow-black/50 transition-colors hover:bg-[#333] light:bg-white"
+              >
+                <History className="size-5" strokeWidth={1.75} />
+                <span className="absolute top-0.5 right-0.5 flex size-2.5">
+                  <span className="absolute inset-0 animate-ping rounded-full bg-sbb-red opacity-60" />
+                  <span className="relative size-2.5 rounded-full bg-sbb-red" />
                 </span>
-                <span className="block truncate text-[11.5px] leading-tight font-light text-muted">
-                  {snap.step + 1}/{snap.replay.updates.length} · {SOURCE[u.source].label}
-                </span>
-              </span>
-            </button>
-            <button onClick={() => step(-1)} disabled={snap.step === 0} aria-label="Previous update" className="ml-1 flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10 disabled:opacity-30">
-              <ChevronLeft className="size-5" strokeWidth={1.75} />
-            </button>
-            <button onClick={() => step(1)} aria-label="Next update" className="flex h-9 items-center gap-0.5 rounded-full bg-sbb-red pr-2.5 pl-3 text-[13px] font-bold text-white transition-colors hover:bg-[#d40000]">
-              Next
-              <ChevronRight className="size-4.5" strokeWidth={2} />
-            </button>
-            <button onClick={stop} aria-label="Stop the replay" className="flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10">
-              <X className="size-4.5" strokeWidth={1.75} />
-            </button>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1 rounded-full border border-fg/20 bg-[#262626] py-1 pr-1 pl-3 shadow-lg shadow-black/50 light:bg-white">
+                <button onClick={() => setSheet("replay")} className="flex min-w-0 items-center gap-2 text-left" aria-label="Open the replay">
+                  <span className="relative flex size-2.5 shrink-0">
+                    <span className="absolute inset-0 animate-ping rounded-full bg-sbb-red opacity-60" />
+                    <span className="relative size-2.5 rounded-full bg-sbb-red" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12.5px] leading-tight font-bold">Replay · {formatMinutes(snap.t)} in</span>
+                    <span className="block truncate text-[11.5px] leading-tight font-light text-muted">
+                      {snap.step + 1}/{snap.replay.updates.length} · {SOURCE[u.source].label}
+                    </span>
+                  </span>
+                </button>
+                <button onClick={() => step(-1)} disabled={snap.step === 0} aria-label="Previous update" className="ml-1 flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10 disabled:opacity-30">
+                  <ChevronLeft className="size-5" strokeWidth={1.75} />
+                </button>
+                <button onClick={() => step(1)} aria-label="Next update" className="flex h-9 items-center gap-0.5 rounded-full bg-sbb-red pr-2.5 pl-3 text-[13px] font-bold text-white transition-colors hover:bg-[#d40000]">
+                  Next
+                  <ChevronRight className="size-4.5" strokeWidth={2} />
+                </button>
+                <button onClick={stop} aria-label="Stop the replay" className="flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10">
+                  <X className="size-4.5" strokeWidth={1.75} />
+                </button>
+                <button onClick={() => setOpen(false)} aria-label="Hide the controls" className="flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10">
+                  <ChevronDown className="size-4.5" strokeWidth={1.75} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -306,6 +327,92 @@ export function ReplayDock() {
 // ---------------------------------------------------------------------------
 // Sheets
 // ---------------------------------------------------------------------------
+
+type Offset = { x: number; y: number };
+const DOCK_OFFSET = "replayDockOffset";
+const MARGIN = 8;
+
+/**
+ * Lets the dock be dragged anywhere on screen (so it never sits over what you want to see).
+ * A press that moves more than a few pixels is a drag, and the click it ends in is swallowed;
+ * one that doesn't is an ordinary tap. The spot is remembered on this device.
+ */
+function useDrag() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [off, setOff] = useState<Offset>(() => {
+    try {
+      const saved = typeof window === "undefined" ? null : (JSON.parse(localStorage.getItem(DOCK_OFFSET) ?? "null") as Offset | null);
+      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) return saved;
+    } catch {}
+    return { x: 0, y: 0 };
+  });
+  const press = useRef<{ id: number; x: number; y: number; from: Offset; moved: boolean; last?: Offset } | null>(null);
+  const swallow = useRef(false);
+
+  /** Keeps the whole dock on screen: after a drag, opening it (it grows), or a resize. */
+  function clamp(o: Offset): Offset {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return o;
+    const left = r.left - off.x + o.x;
+    const top = r.top - off.y + o.y;
+    const dx = Math.max(MARGIN - left, Math.min(0, window.innerWidth - MARGIN - (left + r.width)));
+    const dy = Math.max(MARGIN - top, Math.min(0, window.innerHeight - MARGIN - (top + r.height)));
+    return { x: o.x + dx, y: o.y + dy };
+  }
+  useLayoutEffect(() => {
+    const fit = () =>
+      setOff((o) => {
+        const c = clamp(o);
+        return c.x === o.x && c.y === o.y ? o : c;
+      });
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  });
+
+  return {
+    ref,
+    // No transform until it has been moved: a transformed layer over the page is one more thing for the browser to composite.
+    style: off.x || off.y ? { transform: `translate(${off.x}px, ${off.y}px)` } : undefined,
+    onPointerDown(e: ReactPointerEvent) {
+      if (e.button === 0) press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, from: off, moved: false };
+    },
+    onPointerMove(e: ReactPointerEvent) {
+      const p = press.current;
+      if (!p || p.id !== e.pointerId) return;
+      const dx = e.clientX - p.x;
+      const dy = e.clientY - p.y;
+      if (!p.moved) {
+        if (Math.hypot(dx, dy) < 6) return;
+        p.moved = true;
+        ref.current?.setPointerCapture(e.pointerId);
+      }
+      p.last = clamp({ x: p.from.x + dx, y: p.from.y + dy });
+      setOff(p.last);
+    },
+    onPointerUp(e: ReactPointerEvent) {
+      const p = press.current;
+      press.current = null;
+      if (!p?.moved) return;
+      // The click this press ends in (if the browser sends one, it comes right away) is not a tap.
+      swallow.current = true;
+      setTimeout(() => (swallow.current = false), 0);
+      ref.current?.releasePointerCapture(e.pointerId);
+      try {
+        localStorage.setItem(DOCK_OFFSET, JSON.stringify(p.last ?? off));
+      } catch {}
+    },
+    onPointerCancel() {
+      press.current = null;
+    },
+    onClickCapture(e: ReactMouseEvent) {
+      if (!swallow.current) return;
+      swallow.current = false;
+      e.stopPropagation();
+      e.preventDefault();
+    },
+  };
+}
 
 const SOURCE: Record<Source, { label: string; icon: LucideIcon; className: string }> = {
   timetable: { label: "Timetable (VIA)", icon: History, className: "border-sky-400/60 text-sky-300 light:text-sky-700" },

@@ -14,7 +14,7 @@ import { TripMap, lonLat, type Walk } from "./trip-map";
 import { useForecast } from "@/components/journey";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/lib/journey-query";
 import { VerdictBanner } from "@/components/verdict-card";
-import { ClosureDetails, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
+import { ClosureDetails, ClosureOutlook, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
 import { closureOf } from "@/lib/line-memory";
 import { REPLAY_TRIP, showReplayPicker, useReplay, watchTrip } from "@/components/replay";
 import { withReplay } from "@/lib/replay";
@@ -28,7 +28,7 @@ import { usePrices } from "@/lib/fares";
 import { coverageOf } from "@/lib/passes";
 import { actions, useAppState, useSetting } from "@/lib/store";
 import { getConnections, type Connection } from "@/lib/transport";
-import { DisruptionNotices, PassNotice } from "./alerts";
+import { AlertsCards, AlertsLine, DisruptionNotices, PassNotice } from "./alerts";
 import { Itinerary } from "./itinerary";
 import { Instead, OtherConnectionsSheet, type Box } from "./reroute";
 import { coordOf, downloadCalendarEntry, shareConnection } from "./share";
@@ -397,15 +397,28 @@ export function DetailView() {
                 <>
                   {checking && <p className="text-[14.5px] font-light text-muted">Checking your journey…</p>}
                   {verdict && (
+                    // One card: the action is the headline, the alerts behind it a quiet line under it.
                     <VerdictBanner
                       verdict={verdict}
-                      more={
-                        verdict.closure &&
-                        routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={verdict.closure} offeredVia={verdict.alternative?.query.viaName} />
+                      sub={!!conn.disruptions?.length && <AlertsLine disruptions={conn.disruptions} />}
+                      // With alerts behind it, the banner stays two lines and the full story opens in a sheet.
+                      sheet={
+                        conn.disruptions?.length
+                          ? {
+                              title: "Disruption",
+                              body: (
+                                <>
+                                  <AlertsCards disruptions={conn.disruptions} />
+                                  {verdict.closure && routeMemory && <ClosureOutlook route={routeMemory} conn={conn} query={query} closure={verdict.closure} />}
+                                </>
+                              ),
+                            }
+                          : undefined
                       }
+                      more={verdict.closure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={verdict.closure} offeredVia={verdict.alternative?.query.viaName} />}
                     />
                   )}
-                  {!!conn.disruptions?.length && (
+                  {!verdict && !!conn.disruptions?.length && (
                     <DisruptionNotices
                       disruptions={conn.disruptions}
                       // A verdict (simulated or replayed) already offers the way round in the timeline.
