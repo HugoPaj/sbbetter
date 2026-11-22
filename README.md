@@ -2,6 +2,8 @@
 
 # SBBetter
 
+**Live demo: [sbbetter.vercel.app](https://sbbetter.vercel.app/)**
+
 **Turn disruption data into the traveller's best next move.** Built at **LauzHack 2026** for the SBB challenge
 *"Assist customers in case of disruption"*.
 
