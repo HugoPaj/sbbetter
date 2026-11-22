@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/transpor
   if (ojpEnabled()) {
     try {
       const body = await shared(cacheKey("ojp", endpoint, sp), TTL[endpoint], (s) => fromOjp(endpoint, sp, s), signal);
-      if (body) return json(body, "ojp");
+      if (body) return json(body, "ojp", endpoint);
     } catch (err) {
       if (signal.aborted) return new Response(null, { status: 499 });
       console.warn(`[transport] OJP ${endpoint} failed, falling back to opendata:`, (err as Error).message);
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/transpor
   }
 
   try {
-    return json(await shared(cacheKey("opendata", endpoint, sp), TTL[endpoint], (s) => fromOpendata(endpoint, sp, s), signal), "opendata");
+    return json(await shared(cacheKey("opendata", endpoint, sp), TTL[endpoint], (s) => fromOpendata(endpoint, sp, s), signal), "opendata", endpoint);
   } catch (err) {
     if (signal.aborted) return new Response(null, { status: 499 });
     return Response.json({ error: (err as Error).message }, { status: 502 });
@@ -59,10 +59,15 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/transpo
   return Response.json(body, { headers: { "Cache-Control": "no-store", "X-Data-Source": "ojp-fare" } });
 }
 
-function json(body: unknown, source: "ojp" | "opendata") {
+/** How long the browser reuses an answer without asking: stop names barely change, departures do. */
+const BROWSER_CACHE: Record<string, string> = {
+  locations: "public, max-age=600, stale-while-revalidate=3600",
+};
+
+function json(body: unknown, source: "ojp" | "opendata", endpoint: string) {
   return Response.json(body, {
     headers: {
-      "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+      "Cache-Control": BROWSER_CACHE[endpoint] ?? "public, max-age=30, stale-while-revalidate=60",
       "X-Data-Source": source,
     },
   });
@@ -83,7 +88,7 @@ async function fromOjp(endpoint: string, sp: URLSearchParams, signal: AbortSigna
       const to = sp.get("to");
       // Product filters / paging aren't mapped to OJP yet.
       if (!from || !to || sp.has("page") || sp.has("transportations[]")) return null;
-      const connections = await ojpConnections(
+      const found = await ojpConnections(
         {
           from,
           to,
@@ -96,7 +101,8 @@ async function fromOjp(endpoint: string, sp: URLSearchParams, signal: AbortSigna
         },
         signal,
       );
-      return connections.length ? { connections } : null;
+      // A walk is an answer too: no point asking the other timetable for trains.
+      return found.connections.length || found.walk ? found : null;
     }
     case "stationboard": {
       const id = sp.get("id") ?? sp.get("station");

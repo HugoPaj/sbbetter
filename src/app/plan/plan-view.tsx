@@ -175,7 +175,7 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
       )}
 
       {upcoming.length > 0 && (
-        <Section title="Upcoming" action={{ label: "Tickets", href: "/tickets" }}>
+        <Section title="Upcoming">
           <Card className="overflow-hidden">
             {upcoming.map((u) => (
               <UpcomingRow key={u.ticket?.id ?? u.trip!.id} item={u} passes={passes} now={now!} status={u.trip ? TRIP_STATUS[String(settings[`sim:${u.trip.id}`])] : undefined} />
@@ -590,7 +590,6 @@ function UpcomingRow({ item: { ticket: k, trip: t, at }, status, passes, now }: 
       <div className="w-[52px] shrink-0 self-start text-center">
         <p className="text-[16px] leading-[21.3px] font-bold">{formatTime(at)}</p>
         <p className={cn("mt-0.5 text-[11.5px] leading-[14px] font-light", when.startsWith("in ") || when === "now" ? "font-bold text-fg" : "text-fg/70")}>{when}</p>
-        {depDelay && <DelayLabel note={depDelay} className="text-[11.5px]" />}
       </div>
       <div className="min-w-0 flex-1">
         {to ? <Route from={from} to={to} /> : <p className="truncate text-[15.5px] leading-snug font-bold">{from || k!.product}</p>}
@@ -598,6 +597,7 @@ function UpcomingRow({ item: { ticket: k, trip: t, at }, status, passes, now }: 
           <>
             <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
               <TicketState ticket={!!k} pass={covered} />
+              {depDelay && <span className="shrink-0 text-[11.5px] leading-[14px] font-light text-fg/70">· <DelayLabel note={depDelay} className="text-[11.5px]" /></span>}
               {platform && <span className="shrink-0 text-[11.5px] leading-[14px] font-light whitespace-nowrap text-fg/70">· Pl. {platform}</span>}
             </div>
           </>

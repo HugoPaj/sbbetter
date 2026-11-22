@@ -136,6 +136,7 @@ function placeToLocation(p: X, origin?: { lat: number; lon: number }): Location 
   if (!name) return null;
   const id = stop ? sloidToUic(stop.StopPlaceRef) : lat !== null && lon !== null ? `coord:${lat},${lon}` : null;
   const modes = [place?.Mode].flat().filter(Boolean);
+  if (stop) rememberStopCoord(id, lat, lon);
   return {
     id,
     name,
@@ -193,10 +194,37 @@ async function placeRef(input: string, signal?: AbortSignal): Promise<string> {
   if (/^\d+$/.test(input) || input.startsWith("ch:1:sloid:")) {
     return `<PlaceRef><StopPlaceRef>${esc(input)}</StopPlaceRef><Name><Text>${esc(input)}</Text></Name></PlaceRef>`;
   }
-  const [hit] = await ojpLocations(input, signal);
-  if (!hit?.id) throw new Error(`OJP: no stop found for "${input}"`);
-  return placeRef(hit.id, signal);
+  return placeRef(await stopIdFor(input), signal);
 }
+
+/** Stop ids found for names, so only the first search by name pays for the lookup (stop names barely change). */
+const stopIds = new Map<string, { id: Promise<string>; expires: number }>();
+const STOP_ID_TTL = 6 * 3600_000;
+const MAX_STOP_IDS = 2000;
+
+/**
+ * The stop id a free-text name stands for (its best match). Not tied to the request that asked
+ * first: others waiting for the same name share the lookup. Failures are not kept.
+ */
+function stopIdFor(name: string): Promise<string> {
+  const key = name.trim().toLowerCase();
+  const held = stopIds.get(key);
+  if (held && held.expires > Date.now()) return held.id;
+  if (stopIds.size >= MAX_STOP_IDS) stopIds.clear();
+  const id = ojpLocations(name, AbortSignal.timeout(LOOKUP_TIMEOUT)).then(([hit]) => {
+    if (!hit?.id) throw new Error(`OJP: no stop found for "${name}"`);
+    return hit.id;
+  });
+  const entry = { id, expires: Date.now() + STOP_ID_TTL };
+  stopIds.set(key, entry);
+  id.catch(() => {
+    if (stopIds.get(key) === entry) stopIds.delete(key);
+  });
+  return id;
+}
+
+/** A stop lookup that helps another request along gives up after this long. */
+const LOOKUP_TIMEOUT = 8000;
 
 // ---------------------------------------------------------------------------
 // Locations
@@ -379,7 +407,87 @@ export type OjpTripQuery = {
   track?: boolean;
 };
 
-export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Promise<Connection[]> {
+/** The journey is a short walk: no public transport needed. */
+export type WalkOnly = { minutes: number; metres: number };
+
+/**
+ * Two ends closer than this (metres, as the crow flies): the answer is "walk". OJP takes its time
+ * over these. From a position it looks 20-25 s for public transport that beats the walk before
+ * giving up; between two stops it takes some 8 s to offer a bus away and back.
+ */
+const WALK_ONLY_METRES = 150;
+/** Two ends still within reach on foot, when OJP hasn't answered after WALK_AFTER: don't keep the traveller waiting. */
+const WALK_REACH_METRES = 500;
+const WALK_AFTER = 6000;
+/** Walking pace along streets: 80 m a minute, the path a third longer than the straight line. */
+const walkOf = (straight: number): WalkOnly => {
+  const metres = Math.round(straight * 1.3);
+  return { minutes: Math.max(1, Math.round(metres / 80)), metres };
+};
+
+type LatLon = { lat: number; lon: number };
+
+/** Where stops are, by id: learnt from every answer that mentions them, else looked up (see stopCoord). */
+const stopCoords = new Map<string, Promise<LatLon | null>>();
+const MAX_STOP_COORDS = 20_000;
+
+function rememberStopCoord(id: string | null, lat: number | null, lon: number | null) {
+  if (!id || lat === null || lon === null || id.startsWith("coord:") || stopCoords.size >= MAX_STOP_COORDS) return;
+  stopCoords.set(id, Promise.resolve({ lat, lon }));
+}
+
+/** Where the stop with this id is. Asked of OJP once (some 60 ms); null when it doesn't know the stop. */
+function stopCoord(id: string): Promise<LatLon | null> {
+  let held = stopCoords.get(id);
+  if (!held) {
+    held = ojpPost(
+      `<OJPLocationInformationRequest>
+      <siri:RequestTimestamp>__NOW__</siri:RequestTimestamp>
+      <PlaceRef><StopPlaceRef>${esc(id)}</StopPlaceRef><Name><Text>${esc(id)}</Text></Name></PlaceRef>
+      <Restrictions><Type>stop</Type><NumberOfResults>1</NumberOfResults></Restrictions>
+    </OJPLocationInformationRequest>`,
+      { signal: AbortSignal.timeout(LOOKUP_TIMEOUT) },
+    ).then((raw) => {
+      const { x, y } = parseLocationResponse(raw)[0]?.coordinate ?? {};
+      return x != null && y != null ? { lat: x, lon: y } : null;
+    });
+    if (stopCoords.size < MAX_STOP_COORDS) stopCoords.set(id, held);
+    held.catch(() => stopCoords.get(id) === held && stopCoords.delete(id));
+  }
+  return held;
+}
+
+/** Where one end of a journey is: the position itself, or its stop (by id or name). */
+async function whereIs(end: string): Promise<LatLon | null> {
+  const coord = parseCoord(end);
+  if (coord) return coord;
+  const id = /^\d+$/.test(end) || end.startsWith("ch:1:sloid:") ? sloidToUic(end) : await stopIdFor(end);
+  return id ? stopCoord(id) : null;
+}
+
+export async function ojpConnections(q: OjpTripQuery, signal?: AbortSignal): Promise<{ connections: Connection[]; walk?: WalkOnly }> {
+  const ctrl = new AbortController();
+  const trips = tripRequest(q, signal ? AbortSignal.any([signal, ctrl.signal]) : ctrl.signal);
+  if (q.via) return { connections: await trips };
+
+  // How far apart the two ends are, found out alongside the trip request, which is dropped when they are next to each other.
+  trips.catch(() => {}); // may be dropped below: its failure is then nobody's
+  const [a, b] = await Promise.all([whereIs(q.from), whereIs(q.to)]).catch(() => [null, null]);
+  const distance = a && b ? haversine(a.lat, a.lon, b.lat, b.lon) : Infinity;
+  if (distance > WALK_REACH_METRES) return { connections: await trips };
+  if (distance <= WALK_ONLY_METRES) {
+    ctrl.abort();
+    return { connections: [], walk: walkOf(distance) };
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), WALK_AFTER)));
+  const first = await Promise.race([trips, late]).finally(() => clearTimeout(timer));
+  if (first !== "late") return { connections: first };
+  ctrl.abort();
+  return { connections: [], walk: walkOf(distance) };
+}
+
+async function tripRequest(q: OjpTripQuery, signal?: AbortSignal): Promise<Connection[]> {
   const [origin, destination, via] = await Promise.all([placeRef(q.from, signal), placeRef(q.to, signal), q.via ? placeRef(q.via, signal) : null]);
   // A ViaPoint is a place reference itself, not a wrapper around one.
   const viaPoint = via ? `\n      <Via><ViaPoint>${via.replace(/<\/?PlaceRef>/g, "")}</ViaPoint></Via>` : "";

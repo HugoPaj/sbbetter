@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useBack } from "@/lib/nav-back";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useSyncExternalStore, type ComponentType, type ReactNode, type SVGProps } from "react";
 import { createPortal } from "react-dom";
@@ -71,11 +71,12 @@ export function Header({
   extend = false,
 }: {
   title: string;
+  /** Show a back button. A string is where it leads when there's no previous page in the app to return to (default Plan). */
   back?: boolean | string;
   children?: ReactNode;
   extend?: boolean;
 }) {
-  const router = useRouter();
+  const goBack = useBack(typeof back === "string" ? back : "/plan");
   return (
     <>
       <header
@@ -91,7 +92,7 @@ export function Header({
           {back && (
             <button
               aria-label="Back"
-              onClick={() => (typeof back === "string" ? router.push(back) : router.back())}
+              onClick={goBack}
               className="absolute left-0 -ml-1.25 p-1.75 lg:static lg:mr-1 lg:-ml-2.5 lg:rounded-full lg:hover:bg-black/15"
             >
               <ChevronLeft className="size-6" strokeWidth={1.75} />
@@ -115,7 +116,44 @@ export function Header({
  * sliding under the bar and getting cut off. It carries its own copy of the skirt, so the red stays put too.
  * Desktop stays sticky too unless the caller passes `lg:static` (or its own `lg:top-*`).
  */
-export function Overlap({ children, className, sticky = false }: { children: ReactNode; className?: string; sticky?: boolean }) {
+export function Overlap({
+  children,
+  className,
+  sticky = false,
+  fade = false,
+  gap = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  sticky?: boolean;
+  /** Sticky only: a short page-coloured fade under the card, so what scrolls up meets a gap instead of butting into its edge. Needs room below at rest. */
+  fade?: boolean;
+  /** Sticky only: a thin solid page-coloured strip under the card (the gap the content keeps at rest), then, once scrolled, a fade like the one above the bottom nav, so what scrolls up fades out instead of sliding visibly under the card's rounded corners. */
+  gap?: boolean;
+}) {
+  const fadeRef = useRef<HTMLDivElement>(null);
+  // The gap's fade only shows once the page scrolls: at rest it would dim the top of the first result.
+  useEffect(() => {
+    const el = fadeRef.current;
+    if (!el) return;
+    // Phone: the app scrolls in #app-scroll (layout.tsx), not the window.
+    const scroller = document.getElementById("app-scroll");
+    if (!scroller) return;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      el.style.opacity = String(Math.min(1, scroller.scrollTop / 24));
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", onScroll);
+    };
+  }, [gap]);
   if (!sticky) return <div className={cn("relative z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>{children}</div>;
   return (
     <div className={cn("sticky top-[calc(max(calc(var(--safe-top)+var(--top-gap)),6px)+46.5px)] z-10 -mt-6 px-[8.5px] lg:mt-6", className)}>
@@ -123,6 +161,18 @@ export function Overlap({ children, className, sticky = false }: { children: Rea
       <div aria-hidden className="absolute inset-x-0 -top-[3.5px] h-[27.5px] bg-gradient-to-b from-sbb-red to-[#db0000] lg:hidden" />
       {/* Page colour behind the rest, so what scrolls under never shows around the rounded corners. */}
       <div aria-hidden className="absolute inset-x-0 top-6 bottom-0 bg-page lg:hidden" />
+      {gap && (
+        <>
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-1.25 bg-page lg:hidden" />
+          {/* Mirrors the fade above the bottom nav: results fade out on their way under the card. */}
+          <div
+            ref={fadeRef}
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-[calc(100%+5px)] h-5 bg-[linear-gradient(to_top,transparent,color-mix(in_srgb,var(--color-page)_70%,transparent)_45%,var(--color-page)_85%)] opacity-0 lg:hidden"
+          />
+        </>
+      )}
+      {fade && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-page from-50% to-transparent lg:hidden" />}
       <div className="relative">{children}</div>
     </div>
   );

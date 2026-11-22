@@ -108,6 +108,12 @@ export type Disruption = {
   start?: string;
   end?: string;
   planned?: boolean;
+  /** EG code of the cause, when known exactly (replays); else it is read from `reason`. */
+  causeCode?: string;
+  /** Closed stretches (two stops, or one), when known (replays). */
+  segments?: { id: string; name: string; lat: number; lon: number }[][];
+  /** Key of the replayed real disruption this alert comes from (demo, see lib/replay.ts). */
+  replay?: string;
 };
 
 export type StationboardEntry = Omit<Journey, "passList"> & {
@@ -174,8 +180,16 @@ export type ConnectionsRequest = {
   track?: boolean;
 };
 
+/** The two ends are a short walk apart: there are no connections because none are needed (OJP only). */
+export type WalkOnly = { minutes: number; metres: number };
+
 export async function getConnections(req: ConnectionsRequest, signal?: AbortSignal) {
-  const data = await get<{ connections: Connection[] }>(
+  return (await searchConnections(req, signal)).connections;
+}
+
+/** Like getConnections, and says when the answer is "walk" rather than "nothing runs". */
+export async function searchConnections(req: ConnectionsRequest, signal?: AbortSignal): Promise<{ connections: Connection[]; walk?: WalkOnly }> {
+  return get<{ connections: Connection[]; walk?: WalkOnly }>(
     "connections",
     {
       from: req.from,
@@ -191,7 +205,6 @@ export async function getConnections(req: ConnectionsRequest, signal?: AbortSign
     },
     signal,
   );
-  return data.connections;
 }
 
 export async function getStationboard(

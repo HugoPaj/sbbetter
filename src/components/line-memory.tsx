@@ -200,7 +200,7 @@ function Steps({ steps, start, className }: { steps: Step[]; start?: number; cla
 }
 
 /** The way round as a real connection; opens it. */
-function PlanBLink({ plan, className, compare = "later than planned" }: { plan: PlanB; className?: string; compare?: string }) {
+export function PlanBLink({ plan, className, compare = "later than planned" }: { plan: PlanB; className?: string; compare?: string }) {
   const c = plan.connection;
   return (
     <Link

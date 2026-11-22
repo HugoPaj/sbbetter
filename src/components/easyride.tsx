@@ -205,7 +205,7 @@ export function EasyRideView() {
   const reduction = passes.ga ? `${passes.ga} Travelcard` : passes.halfFare ? "Half Fare Travelcard (1/2)" : "No reduction";
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
       {/* Who travels: the ride is priced with their travelcards. */}
       <Overlap className="lg:mx-auto lg:w-full lg:max-w-[520px]">
         <Card className="flex items-center gap-3 py-3 pr-3 pl-4 shadow-xl shadow-black/40 light:shadow-black/15">
@@ -223,13 +223,13 @@ export function EasyRideView() {
         </Card>
       </Overlap>
 
-      {/* The illustration fills what is left between the two cards; it moves once you are checked in. */}
-      <div className="relative -mt-12 min-h-[220px] flex-1 overflow-hidden">
+      {/* The illustration fills what is left between the two cards (on desktop, the whole pane behind them); it moves once you are checked in. */}
+      <div className="relative -mt-12 min-h-[220px] flex-1 overflow-hidden lg:absolute lg:inset-0 lg:mt-0 lg:min-h-0">
         <Scene variant={riding ? "commute" : "station"} />
       </div>
 
       {/* Start (from, class) or the running ride (travel time), and the slider: a sheet on the tab bar, as in the app. */}
-      <div className="relative z-30 -mt-5 lg:mx-auto lg:-mt-24 lg:mb-10 lg:w-[520px]">
+      <div className="relative z-30 -mt-5 lg:mx-auto lg:mt-auto lg:mb-10 lg:w-[520px]">
         <Card className="rounded-b-none px-3 pt-3.5 pb-[calc(var(--home-inset)+72px)] shadow-[0_-6px_20px_rgba(0,0,0,0.25)] lg:rounded-b-[19px] lg:pb-3">
           {riding ? (
             <div className="px-1.5 pt-0.5 pb-3">

@@ -16,6 +16,8 @@ import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/li
 import { VerdictBanner } from "@/components/verdict-card";
 import { ClosureDetails, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
 import { closureOf } from "@/lib/line-memory";
+import { ReplayMove, showReplayPicker, useReplay, watchTrip } from "@/components/replay";
+import { hitSections, nextMove, withReplay } from "@/lib/replay";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { usePasses } from "@/lib/travelcards";
@@ -49,9 +51,12 @@ export function DetailView() {
   // with live data and the path for the map; undefined only while there is nothing to show.
   const cached = cachedConnection(new URLSearchParams(raw));
   const [loaded, setLoaded] = useState<{ raw: string; conn: Connection | null } | null>(null);
-  const conn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
+  const liveConn = loaded?.raw === raw ? loaded.conn : (cached ?? undefined);
+  /** Demo: a real disruption replayed on today's trains (see components/replay.tsx), as a service alert on this trip. */
+  const replay = useReplay();
+  const conn = withReplay(liveConn, replay);
   /** Delay model forecast per ride of `conn`, in minutes (keyed by section index). */
-  const forecast = useForecast(conn);
+  const forecast = useForecast(liveConn);
   /** What happened the last times the stretches of this route were disrupted. */
   const routeMemory = useRouteMemory(conn);
   const passes = usePasses();
@@ -108,6 +113,12 @@ export function DetailView() {
       .catch((e: Error) => e.name !== "AbortError" && setAssessed({ id: assessId, verdict: null }));
     return () => ctrl.abort();
   }, [conn, raw, scenario, assessId]);
+
+  // The replay follows the trip on screen: it is the one its notifications are about.
+  useEffect(() => {
+    const q = journeyFromSearchParams(new URLSearchParams(raw));
+    if (replay && liveConn && q) watchTrip({ conn: liveConn, query: q, href: `/connections/detail?${raw}` });
+  }, [replay, liveConn, raw]);
 
   const priceOf = usePrices(conn ? [conn] : null, passes);
   if (!query) return <ErrorBox message="No journey selected." />;
@@ -253,7 +264,11 @@ export function DetailView() {
   };
 
   const carried = reroute ?? pendingLate;
-  const statusAt = (i: number): LegStatus | undefined => (verdict ? verdict.notes[i] : carried?.late && i === carried.at ? { kind: "late", minutes: carried.late } : undefined);
+  // A replayed line closure: the rides over the closed stretch are drawn as such (not once trains run again).
+  const replayed = conn?.disruptions?.some((d) => d.replay) && replay?.state && !replay.state.limited ? hitSections(conn, replay.state) : [];
+  const replayMove = replay && conn?.disruptions?.some((d) => d.replay) ? nextMove(replay, conn) : null;
+  const statusAt = (i: number): LegStatus | undefined =>
+    verdict ? verdict.notes[i] : replayed.includes(i) ? { kind: "closed" } : carried?.late && i === carried.at ? { kind: "late", minutes: carried.late } : undefined;
   const lateTs = (i: number) => {
     const st = statusAt(i);
     return (conn?.sections[i]?.arrival.arrivalTimestamp ?? 0) + (st?.kind === "late" ? st.minutes * 60 : 0);
@@ -296,7 +311,7 @@ export function DetailView() {
       : undefined;
   // Line memory. A line closed right now (from the live service messages) is told inside the alert;
   // on a normal day each train carries the way round staff advised for its line.
-  const liveClosure = conn && routeMemory && clock !== null ? closureOf(conn.disruptions, routeMemory.memory, clock * 1000) : null;
+  const liveClosure = conn && routeMemory && clock !== null ? closureOf(conn.disruptions, routeMemory.memory, clock * 1000, routeMemory.hits.map((h) => h.stretch)) : null;
   const quiet = !!routeMemory && !verdict && !checking && !liveClosure;
   const mainLegs = !conn
     ? []
@@ -320,7 +335,7 @@ export function DetailView() {
 
   return (
     <div className={mapMode ? "flex h-(--app-h) flex-col overflow-hidden" : undefined}>
-      <Header title="Connection" back extend />
+      <Header title="Connection" back={journeyHref("/connections", query)} extend />
       {/* Desktop: the itinerary is a column on the left; the map fills the rest (see <aside> below). */}
       <div className="contents lg:block lg:w-[520px] lg:px-4">
       {/* List view: `contents`, so the summary below can stick across the whole page, not just this box. */}
@@ -376,10 +391,12 @@ export function DetailView() {
                       }
                     />
                   )}
+                  {replayMove && replay && <ReplayMove snap={replay} conn={conn} query={query} />}
                   {!!conn.disruptions?.length && (
                     <DisruptionNotices
                       disruptions={conn.disruptions}
-                      planB={liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      // SBB's own detour for this journey (in the replay) comes first; line memory's would repeat it.
+                      planB={!replayMove?.via && replayMove?.tone !== "ok" && liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
                       details={liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
                     />
                   )}
@@ -460,6 +477,10 @@ export function DetailView() {
       {sheet === "sim" && (
         <SimulateDisruptionSheet
           scenario={scenario}
+          onReplay={() => {
+            setSheet(null);
+            showReplayPicker();
+          }}
           onPick={(value) => {
             setScenario(value);
             setSheet(null);

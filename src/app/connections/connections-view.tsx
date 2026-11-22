@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Header, ErrorBox, Overlap, toast } from "@/components/ui";
-import { ConnectionListSkeleton } from "@/components/skeletons";
+import { ConnectionCardSkeleton, ConnectionListSkeleton } from "@/components/skeletons";
 import { ConnectionCard } from "@/components/journey";
+import { useReplay } from "@/components/replay";
+import { withReplay } from "@/lib/replay";
 import { CheaperNearby, DayPrices } from "@/components/cheaper-nearby";
 import { JourneySearchCard } from "@/components/journey-search-card";
 import { journeyFromSearchParams, journeyHref, toConnectionsRequest, type JourneyQuery } from "@/lib/journey-query";
-import { getConnections, type Connection } from "@/lib/transport";
+import { getConnections, searchConnections, type Connection, type WalkOnly } from "@/lib/transport";
 import { formatLongDate, formatShortDate, zurichDateTime } from "@/lib/format";
 import { usePrices, useQuotes } from "@/lib/fares";
 import { CHEAPER_SETTING, cheaperNearby, cheaperThatDay, fetchDay, fetchNearby, plannedAhead, searchWindow, type CheaperPriority } from "@/lib/cheaper";
@@ -28,7 +30,14 @@ type Result = {
   scanning: boolean;
   /** When the results arrived (epoch seconds): nothing earlier can still be caught. */
   since: number;
+  /** No connections because the two ends are a short walk apart. */
+  walk?: WalkOnly;
+  /** Only the first departures so far: the rest of the list is still on its way. */
+  partial?: boolean;
 };
+
+/** Departures asked for ahead of the full list: the timetable answers two in a fraction of the time it needs for six. */
+const QUICK = 2;
 
 export function ConnectionsView() {
   const router = useRouter();
@@ -55,13 +64,28 @@ export function ConnectionsView() {
     if (!q) return;
     const ctrl = new AbortController();
     const key = `${queryKey}#${retry}`;
-    getConnections({ ...toConnectionsRequest(q), limit: 6 }, ctrl.signal)
-      .then(async (found) => {
-        const items = uniqueConnections(found);
+    const req = { ...toConnectionsRequest(q), limit: 6 };
+    /** The full list answered (or failed): the first departures are no longer wanted. */
+    let whole = false;
+    // The first departures show while the full list loads. Not for an arrive-by search (its list
+    // grows upwards) nor from a position (routing the walk takes the time, however few are asked for).
+    if (!q.isArrivalTime && !q.from.startsWith("coord:") && !q.to.startsWith("coord:"))
+      getConnections({ ...req, limit: QUICK }, ctrl.signal)
+        .then((found) => {
+          const items = uniqueConnections(found);
+          if (whole || !items.length) return; // the full list got here first
+          rememberConnections(items);
+          setResult({ key, items, error: null, asked: items[0], nearby: [], scanning: true, since: Date.now() / 1000, partial: true });
+        })
+        .catch(() => {});
+    searchConnections(req, ctrl.signal)
+      .then(async ({ connections, walk }) => {
+        whole = true;
+        const items = uniqueConnections(connections);
         rememberConnections(items);
         const asked = (q.isArrivalTime ? items.at(-1) : items[0]) ?? null;
         const since = Date.now() / 1000;
-        setResult({ key, items, error: null, asked, nearby: [], scanning: !!asked, since });
+        setResult({ key, items, error: null, asked, nearby: [], scanning: !!asked, since, walk });
         if (!asked) return;
         await fetchNearby(q, asked, items, since, (found) => {
           rememberConnections(found);
@@ -69,7 +93,13 @@ export function ConnectionsView() {
         }, ctrl.signal);
         setResult((r) => (r.key === key ? { ...r, scanning: false } : r));
       })
-      .catch((e: Error) => e.name !== "AbortError" && setResult((r) => (r.key === key ? r : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], scanning: false, since: 0 })));
+      .catch(
+        (e: Error) =>
+          (whole = true) &&
+          e.name !== "AbortError" &&
+          // The first departures are kept if they made it; otherwise there is nothing to show.
+          setResult((r) => (r.key === key ? { ...r, partial: false, scanning: false } : { key, items: null, error: "Could not load connections.", asked: null, nearby: [], scanning: false, since: 0 })),
+      );
     return () => {
       ctrl.abort();
       dayScan.current?.abort();
@@ -86,8 +116,13 @@ export function ConnectionsView() {
   // Only while its sheet is open: a closed sheet shouldn't keep spending the price API's quota.
   const dayItems = day?.key === result.key && day.open ? day.items : [];
   const priceOf = usePrices(items, passes);
+  /** Demo: a replayed real disruption shows on the trains it hits (see components/replay.tsx). */
+  const replay = useReplay();
   // Departures that are only compared with the requested one get a lighter price lookup (the price API is rate limited).
-  const candidates = items ? [...items, ...result.nearby, ...dayItems] : [];
+  // The listed cards are priced first: departures only compared with them wait until every card has its price,
+  // so they don't spend the quota a card on screen still needs.
+  const listPriced = !!items && items.every((c) => priceOf(c) !== null);
+  const candidates = items ? (listPriced ? [...items, ...result.nearby, ...dayItems] : items) : [];
   const quoteOf = useQuotes(showPrices ? candidates : null, passes);
 
   if (!query) {
@@ -102,7 +137,7 @@ export function ConnectionsView() {
   const update = (q: JourneyQuery) => router.replace(journeyHref("/connections", q));
 
   async function more(dir: "earlier" | "later") {
-    if (!items?.length || !query || loadingMore) return;
+    if (!items?.length || !query || loadingMore || result.partial) return;
     // Results belong to this search: a new search (or a retry) aborts the request and drops its answer.
     const key = result.key;
     moreCtrl.current?.abort();
@@ -144,9 +179,12 @@ export function ConnectionsView() {
   // i.e. when there is more than one cheaper departure to choose between.
   const suggest = (p: CheaperPriority) =>
     showPrices && items && result.asked ? cheaperNearby(result.asked, [...items, ...result.nearby], quoteOf, { earliest: result.since, later: !query.isArrivalTime, prefer: p }) : [];
-  const cheaper = suggest(prefer);
+  const preferred = suggest(prefer);
   const other = suggest(prefer === "price" ? "time" : "price");
-  const hasChoice = cheaper.length !== other.length || cheaper.some((s, i) => connectionKey(s.connection) !== connectionKey(other[i].connection));
+  // "Closest to my time" can come up empty where "Lowest price" (a wider window) doesn't:
+  // show those then, or the card would say nothing is cheaper and hide the switch.
+  const cheaper = preferred.length ? preferred : other;
+  const hasChoice = preferred.length > 0 && (preferred.length !== other.length || preferred.some((s, i) => connectionKey(s.connection) !== connectionKey(other[i].connection)));
   const asked = showPrices && current ? result.asked : null;
   const ahead = !!asked && plannedAhead(asked, result.since);
   // Nothing cheaper yet, but departures around the asked one are still being looked up or priced.
@@ -206,7 +244,7 @@ export function ConnectionsView() {
       {/* Desktop: the search stays put on the left while the results scroll on the right. */}
       <div className="lg:mx-auto lg:grid lg:max-w-[1160px] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:px-8">
       {/* The search stays in view; the results scroll under it. */}
-      <Overlap sticky className="lg:top-[88px] lg:px-0">
+      <Overlap sticky gap className="lg:top-[88px] lg:px-0">
         {/* The search card rests on a darker tray that also carries the first date. */}
         <div className="rounded-[19px] bg-[#171717] light:bg-[#e4e4e4]">
           <JourneySearchCard query={query} onChange={update} showPrices={showPrices} onShowPricesChange={setShowPrices} />
@@ -218,7 +256,15 @@ export function ConnectionsView() {
       {firstDay("hidden h-8.5 items-center justify-between pr-1.75 pb-1.5 pl-[15px] lg:flex")}
       {error && <ErrorBox message={error} onRetry={load} />}
       {!items && !error && <ConnectionListSkeleton price={showPrices} />}
-      {items?.length === 0 && <ErrorBox message="No connections found." />}
+      {items?.length === 0 && (
+        <ErrorBox
+          message={
+            current && result.walk
+              ? `${query.toName} is about ${result.walk.minutes} min on foot (${result.walk.metres} m) from ${query.fromName === "Current location" ? "where you are" : query.fromName}. No connection needed.`
+              : "No connections found."
+          }
+        />
+      )}
 
       {items && items.length > 0 && (
         <div className="mt-1.25 px-[8.5px] lg:mt-px lg:px-0">
@@ -232,6 +278,7 @@ export function ConnectionsView() {
               dayLabel={ahead ? `Cheapest times on ${formatShortDate(new Date((asked.from.departureTimestamp ?? 0) * 1000))}` : "Cheapest times today"}
               onOpenDay={openDay}
               loading={cheaperLoading}
+              free={quoteOf(asked)?.secondClass === 0}
             />
           )}
           {groups.map((g, gi) => (
@@ -239,19 +286,29 @@ export function ConnectionsView() {
               {gi > 0 && <h2 className="px-[15px] pt-3.5 pb-[8.5px] text-[15px] font-light tracking-tight">{g.day}</h2>}
               <div className="space-y-1.25">
                 {g.list.map((c) => (
-                  <ConnectionCard key={connectionKey(c)} connection={c} walkMinutes={query.walkMinutes} fare={showPrices ? priceOf(c) : undefined} href={detailHref(c)} />
+                  <ConnectionCard key={connectionKey(c)} connection={withReplay(c, replay)} walkMinutes={query.walkMinutes} fare={showPrices ? priceOf(c) : undefined} href={detailHref(c)} />
                 ))}
               </div>
             </section>
           ))}
-          <button
-            onClick={() => more("later")}
-            disabled={loadingMore === "later"}
-            className="mx-auto mt-3.5 flex h-[32px] items-center gap-1.25 rounded-full border border-fg/50 bg-surface px-4.25 text-[14.5px] font-light transition-colors hover:bg-surface-2"
-          >
-            <ChevronDown className="size-4.25" strokeWidth={1.5} />
-            {loadingMore === "later" ? "Loading…" : "Later connections"}
-          </button>
+          {/* The rest of the list is still loading: its cards' places, then "Later" once it is whole. */}
+          {result.partial && (
+            <div role="status" aria-label="Loading more connections" className="mt-1.25 space-y-1.25">
+              {Array.from({ length: 2 }, (_, i) => (
+                <ConnectionCardSkeleton key={i} price={showPrices} />
+              ))}
+            </div>
+          )}
+          {!result.partial && (
+            <button
+              onClick={() => more("later")}
+              disabled={loadingMore === "later"}
+              className="mx-auto mt-3.5 flex h-[32px] items-center gap-1.25 rounded-full border border-fg/50 bg-surface px-4.25 text-[14.5px] font-light transition-colors hover:bg-surface-2"
+            >
+              <ChevronDown className="size-4.25" strokeWidth={1.5} />
+              {loadingMore === "later" ? "Loading…" : "Later connections"}
+            </button>
+          )}
         </div>
       )}
       </div>

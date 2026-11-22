@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, Ticket, TriangleAlert } from "lucide-react";
 import { Skeleton, cn } from "@/components/ui";
 import { disruptionEnd } from "@/lib/disruption-forecast";
+import { Backtest } from "@/components/replay";
 import { formatTime } from "@/lib/format";
 import { passNotice, type PassSaving } from "@/lib/pricing";
 import type { Disruption } from "@/lib/transport";
@@ -67,6 +68,7 @@ export function DisruptionNotices({ disruptions, planB, details }: { disruptions
           </ul>
         ))}
       {open && details}
+      {open && disruptions.some((d) => disruptionEnd(d)) && <Backtest className="mt-2 pl-7" />}
     </div>
   );
 }

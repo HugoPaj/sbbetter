@@ -2,7 +2,7 @@
 """
 Builds public/line-memory.json from the SBB hackathon export (Daten.zip).
 
-    python3 scripts/build-line-memory.py path/to/Daten
+    python3 scripts/build-line-memory.py [path/to/Daten]
 
 "Line memory": what happened the last times a stretch of line was disrupted.
 Standard library only. Per stretch (two neighbouring stations, or one station):
@@ -40,7 +40,7 @@ STOPS_URL = "https://data.sbb.ch/api/explore/v2.1/catalog/datasets/dienststellen
 MIN_SAMPLES = 8  # fewer incidents with a step for a cause → that step falls back to all causes
 
 csv.field_size_limit(10**9)
-root = Path(sys.argv[1] if len(sys.argv) > 1 else "Daten")
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "data/Daten"
 ext, intern = root / "extern-liveticker", root / "intern-liveticker"
 
 

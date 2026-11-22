@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, CalendarPlus, FlaskConical, Share2, Star, Ticket } from "lucide-react";
+import { ArrowRightLeft, CalendarPlus, ChevronRight, FlaskConical, Share2, Star, Ticket } from "lucide-react";
 import { Card, InfoLine, ListRow, OutlineButton, Radio, Sheet } from "@/components/ui";
 import { RouteMap } from "@/components/plan/route-map";
 import { SCENARIOS, type Scenario } from "@/lib/disruption";
@@ -49,9 +49,29 @@ export function MoreSheet({
 }
 
 /** Demo: pick a disruption to pretend happens to this connection. */
-export function SimulateDisruptionSheet({ scenario, onPick, onClose }: { scenario: Scenario | ""; onPick: (s: Scenario | "") => void; onClose: () => void }) {
+export function SimulateDisruptionSheet({
+  scenario,
+  onPick,
+  onReplay,
+  onClose,
+}: {
+  scenario: Scenario | "";
+  onPick: (s: Scenario | "") => void;
+  /** Opens the replays of real disruptions instead. */
+  onReplay?: () => void;
+  onClose: () => void;
+}) {
   return (
     <Sheet title="Simulate a disruption" onClose={onClose}>
+      {onReplay && (
+        <button onClick={onReplay} className="mb-2 flex w-full items-center gap-3 rounded-[15px] border border-fg/25 px-3.5 py-2.75 text-left transition-colors hover:bg-fg/5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15.5px] font-bold tracking-tight">Replay a real disruption</span>
+            <span className="block text-[13px] font-light text-muted">September 2026, update by update, on today&apos;s trains</span>
+          </span>
+          <ChevronRight className="size-4.25 shrink-0" strokeWidth={1.5} />
+        </button>
+      )}
       {SCENARIOS.map((o) => (
         <button key={o.value} onClick={() => onPick(o.value)} className="flex w-full items-center gap-3.5 py-2.5 text-left">
           <Radio checked={scenario === o.value} />

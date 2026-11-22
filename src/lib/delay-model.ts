@@ -17,7 +17,11 @@ type Model = { objective: "binary" | "quantile"; trees: Node[][] };
 
 export type DelayModel = {
   features: string[];
-  models: Record<"p3" | "p6" | "p10" | "q50" | "q80", Model>;
+  /**
+   * `q80` (80th percentile of the arrival delay) is the one the app shows and the only one shipped:
+   * scripts/trim-delay-model.mjs drops the rest of the training export (p3, p6, p10, q50).
+   */
+  models: { q80: Model } & Partial<Record<"p3" | "p6" | "p10" | "q50", Model>>;
   encodings: Record<"stop" | "line" | "cat" | "op", Record<string, [number, number]>>;
   defaults: { mean: number; p3: number };
   operators: Record<string, string>;
@@ -27,12 +31,7 @@ export type DelayModel = {
 export type Weather = { rain: number; snow: number; temp: number; gust: number };
 
 export type DelayEstimate = {
-  /** Chance of arriving at least 3 / 6 / 10 min late. */
-  p3: number;
-  p6: number;
-  p10: number;
-  /** Typical (median) and pessimistic (80th percentile) arrival delay, minutes. */
-  median: number;
+  /** Pessimistic (80th percentile) arrival delay, minutes. */
   p80: number;
   /** The live delay the estimate started from, if the train reported one. */
   liveDelay: number | null;
@@ -110,20 +109,15 @@ export function features(model: DelayModel, section: Section, weather: Weather |
 
 export function estimate(model: DelayModel, section: Section, weather: Weather | null): DelayEstimate {
   const x = features(model, section, weather);
-  const p = (k: keyof DelayModel["models"]) => predict(model.models[k], x);
   const live = x[model.features.indexOf("delay_now")];
   return {
-    p3: p("p3"),
-    p6: p("p6"),
-    p10: p("p10"),
-    median: Math.max(0, p("q50")),
-    p80: Math.max(0, p("q80")),
+    p80: Math.max(0, predict(model.models.q80, x)),
     liveDelay: Number.isNaN(live) ? null : live,
   };
 }
 
 let loading: Promise<DelayModel> | null = null;
-/** The model is ~MBs, so it is fetched once, lazily, from /public. */
+/** The model is ~1 MB, so it is fetched once, lazily, from /public. */
 export function loadDelayModel(): Promise<DelayModel> {
   loading ??= fetch(appUrl("/delay-model.json"))
     .then((r) => {

@@ -263,13 +263,32 @@ export type Closure = {
   simulated?: boolean;
 };
 
-/** The first live service message that is an unplanned disruption running right now. */
-export function closureOf(disruptions: Disruption[] | undefined, memory: LineMemory, now = Date.now()): Closure | null {
+/**
+ * The remembered stretch inside a closed stretch given by its stops (a replayed disruption knows them):
+ * both ends on the way between its two stops, or, for a closed station, a stretch ending there.
+ * Stretches the journey runs over (`route`) first, then the most disrupted.
+ */
+function stretchWithin(segments: NonNullable<Disruption["segments"]>, memory: LineMemory, route: Stretch[] = []): Stretch | null {
+  const km = (a: { lat: number | null; lon: number | null }, b: { lat: number | null; lon: number | null }) =>
+    a.lat === null || a.lon === null || b.lat === null || b.lon === null ? Infinity : Math.hypot((a.lat - b.lat) * 110.57, (a.lon - b.lon) * 111.32 * Math.cos((a.lat * Math.PI) / 180));
+  const inside = (s: Stretch) =>
+    segments.some(([a, b]) =>
+      b ? s.ends.every((e) => e.id === a.id || e.id === b.id || km(a, e) + km(e, b) <= 1.25 * km(a, b) + 1) : s.ends.some((e) => e.id === a.id || normName(e.name) === normName(a.name)),
+    );
+  const found = memory.stretches.filter(inside);
+  return found.sort((x, y) => Number(route.includes(y)) - Number(route.includes(x)) || y.n - x.n)[0] ?? null;
+}
+
+/**
+ * The first live service message that is an unplanned disruption running right now.
+ * `route`: the remembered stretches the journey runs over, preferred when the message only gives stops.
+ */
+export function closureOf(disruptions: Disruption[] | undefined, memory: LineMemory, now = Date.now(), route?: Stretch[]): Closure | null {
   for (const d of disruptions ?? []) {
     const start = d.start ? Date.parse(d.start) : NaN;
     // The script covers the first hours; days-old messages are a different kind of event.
     if (d.planned || Number.isNaN(start) || start > now || now - start > 12 * 3600e3) continue;
-    const stretch = stretchOf(d, memory);
+    const stretch = stretchOf(d, memory) ?? (d.segments?.length ? stretchWithin(d.segments, memory, route) : null);
     // A line that is closed or restricted, not any service message (a lift out of order, a platform change).
     if (!stretch && !/interrupt|limited service|restrict|line closed/i.test(d.summary)) continue;
     const words = /(?:due to|reason:)\s*(?:an? |the )?([^.]+)/i.exec(d.reason ?? "")?.[1] ?? null;
@@ -278,7 +297,7 @@ export function closureOf(disruptions: Disruption[] | undefined, memory: LineMem
     return {
       stretch: stretch?.key ?? null,
       // However the feed phrases it ("The reason is a signal box failure"): fall back to the whole sentence.
-      cause: named === "ALL" ? causeCode(d.reason ?? null) : named,
+      cause: d.causeCode ?? (named === "ALL" ? causeCode(d.reason ?? null) : named),
       start: d.start!,
       end: Number.isFinite(end) && end - start < 7 * 24 * 3600e3 ? d.end : undefined,
     };

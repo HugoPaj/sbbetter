@@ -1,12 +1,13 @@
 "use client";
 
-import { Bell, Car, SunMoon, CircleHelp, CircleUserRound, IdCard, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
+import { Bell, Car, History, SunMoon, CircleHelp, CircleUserRound, IdCard, Newspaper, Section, Tickets, User, Users, WalletMinimal } from "lucide-react";
 import { useState } from "react";
 import { Card, DESK_COL, Header, ListRow, Overlap, SectionTitle, toast } from "@/components/ui";
 import { USER, fullName } from "@/lib/mock-data";
 import { useSetting } from "@/lib/store";
 import { ProfileSheets, type ProfileSheet } from "./sheets";
 import { SERVICES, ServiceSheet } from "@/components/shop";
+import { showReplayPicker } from "@/components/replay";
 
 export default function ProfilePage() {
   const [sheet, setSheet] = useState<ProfileSheet | null>(null);
@@ -46,6 +47,11 @@ export default function ProfilePage() {
           {SERVICES.map((s) => (
             <ListRow key={s.label} icon={s.icon} label={s.label} onClick={() => setService(s.label)} />
           ))}
+        </Card>
+
+        <SectionTitle>Demo</SectionTitle>
+        <Card className="overflow-hidden">
+          <ListRow icon={History} label="Replay a real disruption" chevron onClick={showReplayPicker} />
         </Card>
 
         <SectionTitle>Help</SectionTitle>

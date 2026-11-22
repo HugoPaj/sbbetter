@@ -14,7 +14,8 @@ type Entry = { promise: Promise<unknown>; expires: number };
 
 const entries = new Map<string, Entry>();
 const MAX_ENTRIES = 500;
-const UPSTREAM_TIMEOUT = 25_000;
+/** OJP answers a normal search in about half a second; one still running after this is not coming (the route then falls back). */
+const UPSTREAM_TIMEOUT = 12_000;
 
 /** How long an answer is reused, by endpoint. Real-time data stays fresh; stop names barely change. */
 export const TTL: Record<string, number> = {

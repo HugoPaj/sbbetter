@@ -8,6 +8,7 @@ import { PlanIcon, QrIcon } from "./icons";
 import { SbbLogo, cn } from "./ui";
 import { THEME_OPTIONS, setTheme, useTheme, useThemeChoice } from "@/lib/theme";
 import { useSetting } from "@/lib/store";
+import { useTrackNavigation } from "@/lib/nav-back";
 
 /** While an EasyRide ride runs, the Tickets tab gets a red tick (as in the native app): the ticket is there. */
 function RideTick() {
@@ -45,6 +46,7 @@ export function BottomNav() {
   const pathname = usePathname();
   // Always mounted: keeps the theme in step with the device setting while "System" is chosen.
   useTheme();
+  useTrackNavigation();
   const activeIndex = TABS.findIndex((t) => t.match.some((m) => pathname.startsWith(m)));
   const active = TABS[activeIndex];
   /** Centre of the active tab, measured from the bar's left edge. */
@@ -55,11 +57,12 @@ export function BottomNav() {
     <>
     {/*
       Fade to the page colour (black in dark mode, near-white in light) where the page scrolls
-      under the bar. It starts 30px into the bar so the notch pocket behind the active tab fades too.
+      under the bar. It runs down to the screen's bottom edge: the notch pocket behind the active tab
+      reaches almost to the bar's bottom, and shows the page through it, so it must be fully faded there too.
     */}
     <div
       aria-hidden
-      className="pointer-events-none fixed bottom-[calc(30px+var(--home-inset))] left-1/2 z-[25] h-[80px] w-full max-w-[430px] -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-page)_70%,transparent)_45%,var(--color-page)_85%)] lg:hidden"
+      className="pointer-events-none fixed bottom-0 left-1/2 z-[25] h-[calc(110px+var(--home-inset))] w-full max-w-[430px] -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,var(--color-page)_70%,transparent)_36px,var(--color-page)_68px)] lg:hidden"
     />
     <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 light:drop-shadow-[0_-1px_8px_rgba(0,0,0,0.12)] lg:hidden">
       <div className="relative h-[calc(60px+var(--home-inset))] overflow-hidden">

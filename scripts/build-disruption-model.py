@@ -2,7 +2,7 @@
 """
 Builds src/lib/disruption-model.json from the SBB hackathon export (Daten.zip).
 
-    python3 scripts/build-disruption-model.py path/to/Daten
+    python3 scripts/build-disruption-model.py [path/to/Daten]
 
 Standard library only. What it learns, per disruption cause (EG_xxx):
   - how long disruptions last        public liveticker, everything before CUTOFF
@@ -30,7 +30,7 @@ MIN_SAMPLES = 8  # fewer samples for a cause → fall back to all causes
 OUT = Path(__file__).resolve().parent.parent / "src/lib/disruption-model.json"
 
 csv.field_size_limit(10**9)
-root = Path(sys.argv[1] if len(sys.argv) > 1 else "Daten")
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "data/Daten"
 ext = root / "extern-liveticker"
 
 

@@ -21,6 +21,9 @@ const reason = (c: Connection, fare: Quote) => (fare.pass ? passSummary(fare.pas
  * While departures around it are still being looked up or priced, the last row
  * says so: most searches turn up nothing cheaper, so no room is held for a
  * suggestion that may never come (the list below would jump when it didn't).
+ * Once done with nothing found, the same spot says so, so the search reads as
+ * finished rather than missing. Not when the trip is already free: nothing can
+ * be cheaper, so there is nothing to report.
  */
 export function CheaperNearby({
   items,
@@ -31,6 +34,7 @@ export function CheaperNearby({
   dayLabel,
   onOpenDay,
   loading = false,
+  free = false,
 }: {
   items: Cheaper[];
   hrefOf: (c: Connection) => string;
@@ -42,6 +46,8 @@ export function CheaperNearby({
   onOpenDay: () => void;
   /** Nearby departures or their prices are still loading. */
   loading?: boolean;
+  /** The requested connection costs nothing (a travelcard covers it). */
+  free?: boolean;
 }) {
   return (
     <section aria-label="Cheaper departures" aria-busy={loading} className="mb-1.25 divide-y divide-surface-3 overflow-hidden rounded-[19px] bg-surface">
@@ -100,6 +106,9 @@ export function CheaperNearby({
           <span aria-hidden className="skeleton shrink-0 text-[12px] font-light tracking-tight text-muted">
             Comparing nearby…
           </span>
+        )}
+        {!loading && !free && items.length === 0 && (
+          <span className="shrink-0 text-[12px] font-light tracking-tight text-muted">None cheaper within {formatMinutes(window)}</span>
         )}
         <ChevronRight className="size-4.5 shrink-0 text-muted" strokeWidth={1.5} />
       </button>
@@ -191,7 +200,6 @@ export function DayPrices({
           })}
         </ul>
       )}
-      <p className="mt-3 px-1 text-[11px] leading-snug text-muted">Prices are live quotes: Supersaver tickets can sell out or change. The lowest price is shown in green.</p>
     </Sheet>
   );
 }

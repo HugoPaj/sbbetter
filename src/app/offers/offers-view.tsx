@@ -162,9 +162,9 @@ export function OffersView() {
 
   return (
     <div>
-      <Header title="Offers" back extend />
+      <Header title="Offers" back={`/connections/detail?${raw}`} extend />
       {/* The trip stays in view; the choices below scroll under it. */}
-      <Overlap sticky className={cn(DESK_COL, "lg:static")}>
+      <Overlap sticky fade className={cn(DESK_COL, "lg:static")}>
         <Card className="px-[18px] pt-[15px] pb-4">
           <p className="text-[16px] leading-[24px] font-bold">
             <span className="inline-block">

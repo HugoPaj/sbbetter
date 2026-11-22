@@ -46,3 +46,6 @@ next-env.d.ts
 
 # commute alert subscriptions (local store)
 /.data
+
+# SBB hackathon export (internal data, staff names/phone numbers): local only, never commit
+/data/
