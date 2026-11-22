@@ -138,15 +138,20 @@ body {
     overscroll-behavior: none;
   }
 
-  /* Installed on iOS: stretch the document to the full screen height, and make <body> the frame
+  /* Installed on iOS: stretch <body> to the full screen height, and make it the frame
      for every `position: fixed` element (tab bar, bottom panels, sheets, toasts) so `bottom: 0`
      lands on the physical screen edge instead of above the home indicator. */
-  :root[data-ios-app],
+  /* <body> is pinned with position: fixed, so it adds nothing to the document's scrollable area:
+     --app-h is taller than the (buggy, ~34pt short) layout viewport, and an in-flow body that size
+     let the whole page drag a few pixels up/down and sideways even with overflow: hidden. */
   :root[data-ios-app] body {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
     height: var(--app-h);
     min-height: var(--app-h);
-  }
-  :root[data-ios-app] body {
+    overflow: hidden;
     transform: translate(0);
   }
   :root[data-ios-app] {
