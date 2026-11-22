@@ -317,7 +317,7 @@ function TicketCard({ ticket, valid, onOpen }: { ticket: Ticket; valid?: boolean
       <div className="min-w-0 flex-1">
         <p className="text-[11.5px] leading-[15px] font-light tracking-tight text-fg/70">
           {ticket.product}
-          {valid && ` · ${ticket.travelClass === 1 ? "1st" : "2nd"} cl.`}
+          {valid && !ticket.classless && ` · ${ticket.travelClass === 1 ? "1st" : "2nd"} cl.`}
         </p>
         <p className="text-[16px] leading-[1.5] font-bold">
           {ticket.from}

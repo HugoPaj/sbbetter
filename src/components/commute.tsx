@@ -36,6 +36,7 @@ export function CommuteSetup({ initial, onClose }: { initial: Commute | null; on
           <PrimaryButton
             onClick={() => {
               if (!c.from || !c.to) return toast("Please choose your home and work stops.");
+              if (c.from === c.to) return toast("Home and work need to be different stops.");
               if (!c.outTime || !c.backTime) return toast("Please set both departure times.");
               actions.set({ commute: c });
               // Alerts follow the new route and times.

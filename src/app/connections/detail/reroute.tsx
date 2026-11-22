@@ -6,7 +6,7 @@ import { PrimaryButton, Sheet, cn } from "@/components/ui";
 import { WalkIcon } from "@/components/icons";
 import { LineLabel, ModeBadge } from "@/components/journey";
 import { connectionKey } from "@/lib/connection-key";
-import { formatTime } from "@/lib/format";
+import { formatMinutes, formatTime } from "@/lib/format";
 import type { Checkpoint, Connection, Section } from "@/lib/transport";
 import { LINE } from "./itinerary";
 import { platformLabel } from "./timeline";
@@ -53,7 +53,7 @@ export function Instead({ box }: { box: Box }) {
       </ul>
       <p className="mt-2.5 text-[14.5px] leading-snug font-light">
         Arrive <b className="font-bold">{formatTime(box.connection.to.arrival)}</b>
-        {box.lateMinutes > 0 && <span className="text-muted"> · {box.lateMinutes} min later</span>}
+        {box.lateMinutes > 0 && <span className="text-muted"> · {formatMinutes(box.lateMinutes)} later</span>}
       </p>
       {open && <MiniTimeline connection={box.connection} />}
       <PrimaryButton onClick={box.onAccept} className="mt-3">
@@ -190,7 +190,7 @@ export function OtherConnectionsSheet({
                   </span>
                   <span className="block text-[13px] font-light text-muted">
                     Arrive {formatTime(c.to.arrival)}
-                    {lateBy(c) > 0 && ` · ${lateBy(c)} min later`}
+                    {lateBy(c) > 0 && ` · ${formatMinutes(lateBy(c))} later`}
                     {c.transfers > 0 && ` · ${c.transfers} change${c.transfers > 1 ? "s" : ""}`}
                   </span>
                 </span>

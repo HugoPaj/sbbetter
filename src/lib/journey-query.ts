@@ -63,7 +63,7 @@ export function journeyFromSearchParams(sp: URLSearchParams): JourneyQuery | nul
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(sp.get("time") ?? "") ? sp.get("time")! : "",
     isArrivalTime: sp.get("arr") === "1",
     transportations: tr,
-    walkMinutes: sp.get("walk") ? Number(sp.get("walk")) : undefined,
+    walkMinutes: /^\d{1,3}$/.test(sp.get("walk") ?? "") ? Number(sp.get("walk")) : undefined,
     via: sp.get("via") ?? undefined,
     viaName: sp.get("viaName") ?? sp.get("via") ?? undefined,
   };

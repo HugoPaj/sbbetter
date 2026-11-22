@@ -20,6 +20,8 @@ export type Ticket = {
   validTo: string; // ISO
   price: number;
   travelClass: 1 | 2;
+  /** Not a travel ticket (parking): it has no class to show. */
+  classless?: boolean;
   /** The journey it was bought for (tickets from Offers): Plan's Upcoming opens it. */
   trip?: TicketTrip;
   /** Bought in the SBB app: the real ticket (and its code) is there; this is the traveller's own record of it. */
@@ -85,13 +87,40 @@ const listeners = new Set<() => void>();
 const EMPTY: State = { tickets: [], trips: [], ...EXTRA };
 let state: State | null = null;
 
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const isDate = (x: unknown) => typeof x === "string" && !Number.isNaN(Date.parse(x));
+
+/**
+ * A saved state, with every field of the wrong shape replaced by its default (a damaged or
+ * hand-edited save must not take the whole app down). Tickets without valid dates are dropped.
+ */
+export function sanitize(saved: unknown): State {
+  const base = fresh();
+  if (!isObj(saved)) return base;
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, def] of Object.entries(base)) {
+    const v = saved[k];
+    if (v === undefined) continue;
+    if (Array.isArray(def)) out[k] = Array.isArray(v) ? v.filter(isObj) : def;
+    else if (def === null) out[k] = isObj(v) ? v : null;
+    else out[k] = isObj(v) ? v : def;
+  }
+  out.tickets = (out.tickets as Record<string, unknown>[]).filter((t) => isDate(t.validFrom) && isDate(t.validTo));
+  out.plates = Array.isArray(saved.plates) ? saved.plates.filter((x) => typeof x === "string") : [];
+  const tc = out.travelcards as Record<string, unknown>;
+  if (!Array.isArray(tc.national) || !Array.isArray(tc.zones) || !Array.isArray(tc.areas)) out.travelcards = DEFAULT_TRAVELCARDS;
+  const commute = out.commute as Record<string, unknown> | null;
+  if (commute && !["from", "fromName", "to", "toName", "outTime", "backTime"].every((f) => typeof commute[f] === "string")) out.commute = null;
+  return out as State;
+}
+
 function load(): State {
   if (state) return state;
   if (typeof window === "undefined") return EMPTY;
   try {
     const raw = window.localStorage.getItem(KEY);
     // Older saved states lack the newer fields: fill them in.
-    state = raw ? { ...fresh(), ...(JSON.parse(raw) as Partial<State>) } : fresh();
+    state = raw ? sanitize(JSON.parse(raw)) : fresh();
   } catch {
     state = fresh();
   }

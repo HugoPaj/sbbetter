@@ -78,7 +78,7 @@ export function TicketSheet({ ticket, valid, onClose }: { ticket: Ticket; valid:
         <InfoLine label="Traveller" value={`${USER.firstName} ${USER.lastName}, ${USER.birthDate}`} />
         <InfoLine label={ticket.to ? "Route" : "Valid for"} value={route} />
         <InfoLine label={ticket.to ? "Via" : "Details"} value={ticket.via} />
-        <InfoLine label="Class" value={ticket.travelClass === 1 ? "1st class" : "2nd class"} />
+        {!ticket.classless && <InfoLine label="Class" value={ticket.travelClass === 1 ? "1st class" : "2nd class"} />}
         <InfoLine label="Validity" value={period} />
         <InfoLine label="Price" value={`${inSbb ? "about " : ""}CHF ${ticket.price.toFixed(2)}`} />
         {inSbb ? <InfoLine label="Bought in" value="SBB app" /> : <InfoLine label="Ticket ID" value={ticket.id} />}

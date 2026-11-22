@@ -1,6 +1,6 @@
 import { connectionKey } from "./connection-key";
 import { forecastDelay } from "./connection-estimate";
-import { formatTime, zurichDateTime } from "./format";
+import { formatMinutes, formatTime, zurichDateTime } from "./format";
 import { journeyHref, toConnectionsRequest, type JourneyQuery } from "./journey-query";
 import { advisedDetour, closureOf, findPlanB, loadLineMemory, stretchName, stretchesOn, type LineMemory } from "./line-memory";
 import type { Commute } from "./store";
@@ -103,7 +103,7 @@ export function composeAlert(f: Facts): CommuteAlert {
       kind: "closed",
       title: `Line closed on your way to ${f.train.to}`,
       body: p
-        ? `${where}. Plan B: ${p.line} via ${p.via} at ${p.time}, arriving ${p.arrival}${p.extraMinutes > 0 ? ` (${p.extraMinutes} min later)` : ""}.`
+        ? `${where}. Plan B: ${p.line} via ${p.via} at ${p.time}, arriving ${p.arrival}${p.extraMinutes > 0 ? ` (${formatMinutes(p.extraMinutes)} later)` : ""}.`
         : f.closure.advisedVia
           ? `${where}. Staff usually send travellers via ${f.closure.advisedVia}: check the way round.`
           : `${where}. Check other connections before you leave.`,

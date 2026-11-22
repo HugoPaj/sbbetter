@@ -467,7 +467,8 @@ const NO_TOASTS: ToastItem[] = [];
 /** Show a short confirmation at the bottom of the screen (rendered by <Toaster/> in the root layout). */
 export function toast(message: string, ms = 2600) {
   const id = ++toastSeq;
-  toasts = [...toasts.slice(-2), { id, message }];
+  // The newest replaces the rest: stacked, an old message (e.g. a fixed form error) reads as still current.
+  toasts = [{ id, message }];
   toastListeners.forEach((l) => l());
   setTimeout(() => {
     toasts = toasts.filter((t) => t.id !== id);

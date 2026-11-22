@@ -295,7 +295,8 @@ export function ReplayDock() {
         </div>
       )}
 
-      {banner && (
+      {/* Gone with the replay when it is stopped. */}
+      {banner && snap && (
         <button
           key={banner.id}
           onClick={() => {

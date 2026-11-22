@@ -225,6 +225,7 @@ function ProductSheet({ product, place, onClose, onBought }: { product: Product;
       validTo: end.toISOString(),
       price,
       travelClass: klass === "1" ? 1 : 2,
+      classless: parking || undefined,
     });
     if (parking && !plates.includes(plate.trim().toUpperCase())) actions.set({ plates: [...plates, plate.trim().toUpperCase()] });
     toast(`${product.label} purchased (demo, nothing was charged).`);
@@ -282,12 +283,14 @@ function receiptText(t: Ticket) {
     "",
     `Product:   ${t.product}`,
     `Route:     ${[t.from, t.to].filter(Boolean).join(" -> ")}`,
-    `Class:     ${t.travelClass === 1 ? "1st" : "2nd"}`,
+    t.classless ? null : `Class:     ${t.travelClass === 1 ? "1st" : "2nd"}`,
     `Valid:     ${formatDate(new Date(t.validFrom))} ${formatTime(t.validFrom)} - ${formatDate(new Date(t.validTo))} ${formatTime(t.validTo)}`,
     `Traveller: ${fullName}`,
     `Total:     CHF ${t.price.toFixed(2)} (incl. VAT)`,
     `Reference: ${t.id}`,
-  ].join("\n");
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
 }
 
 function download(name: string, text: string, type = "text/plain") {

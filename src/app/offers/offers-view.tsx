@@ -63,7 +63,13 @@ export function OffersView() {
   }, [raw, key]);
 
   const priceOf = usePrices(conn ? [conn] : null, passes);
-  if (!query) return <ErrorBox message="No journey selected." />;
+  if (!query)
+    return (
+      <>
+        <Header title="Offers" back="/plan" />
+        <ErrorBox message="No journey selected." />
+      </>
+    );
 
   // With a travelcard covering part of the trip, the ticket is for the uncovered stretch only,
   // and nothing the card already covers may be sold. The card depends on the time of travel,
@@ -141,7 +147,8 @@ export function OffersView() {
     const handoff = sbbHandoff(part ? cutConnection(conn, part.a, part.b) : conn, { travelClass: effectiveClass as 1 | 2, returnTrip: isReturn });
     const ticket = {
       id: `t-${now}`,
-      product: productName,
+      // What was bought on top shows on the ticket too (the price includes it).
+      product: [productName, cityOn ? `City ${cityOf(toName ?? "")}` : null].filter(Boolean).join(" + "),
       from: stretch?.from ?? startLabel(fromName ?? "", boardingStop(conn)),
       to: stretch?.to ?? toName ?? "",
       via: via || "direct",

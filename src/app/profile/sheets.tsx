@@ -557,6 +557,8 @@ function ResetDemo({ onClose }: { onClose: () => void }) {
       <div className="mt-5 space-y-2.5">
         <PrimaryButton
           onClick={() => {
+            // The server would keep pushing alerts for the commute being deleted.
+            void disableCommuteAlerts().catch(() => {});
             actions.reset();
             onClose();
             toast("Demo data reset.");

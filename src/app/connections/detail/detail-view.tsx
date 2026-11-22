@@ -137,7 +137,13 @@ export function DetailView() {
   }, [replay, liveConn, raw]);
 
   const priceOf = usePrices(conn ? [conn] : null, passes);
-  if (!query) return <ErrorBox message="No journey selected." />;
+  if (!query)
+    return (
+      <>
+        <Header title="Connection" back="/plan" />
+        <ErrorBox message="No journey selected." />
+      </>
+    );
 
   // While the next step of a replay is assessed, the last verdict for this trip stays up (no flicker).
   const replayed = replayHit && replayAssessed?.raw === raw ? replayAssessed.verdict : null;
