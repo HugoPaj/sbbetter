@@ -23,7 +23,7 @@ export function VerdictBanner({ verdict, more }: { verdict: Verdict; /** Shown w
       </button>
       {/* With an alternative, the "Take instead" box in the timeline says what to do. */}
       {!alt && <p className="mt-1 pl-7 text-[14.5px] leading-snug font-light">{verdict.detail}</p>}
-      {open && <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{verdict.why} (Simulated for this demo.)</p>}
+      {open && <p className="mt-1.5 pl-7 text-[13px] leading-snug font-light text-fg/80">{verdict.why} {verdict.note ?? "(Simulated for this demo.)"}</p>}
       {open && more}
     </div>
   );

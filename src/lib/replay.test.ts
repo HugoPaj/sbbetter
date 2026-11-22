@@ -172,6 +172,6 @@ describe("Wädenswil – Pfäffikon SZ, 10 September 2026", () => {
     expect(nextMove(at(r, 66), zurichChur)?.headline).toBe("Travel via St. Gallen");
     const later = nextMove(at(r, 292), zurichChur)!;
     expect(later.headline).toBe("Your IC 3 can't get through");
-    expect(later.detail).toContain("at the earliest");
+    expect(later.detail).toContain("no less than");
   });
 });

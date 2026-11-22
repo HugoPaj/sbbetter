@@ -1,5 +1,5 @@
 import { appUrl } from "./app-url";
-import { formatTime, haversine } from "./format";
+import { formatMinutes, formatTime, haversine } from "./format";
 import { normName } from "./line-memory";
 import type { Connection, Disruption, Section } from "./transport";
 
@@ -70,6 +70,8 @@ export type Replay = {
   causeLabel: string;
   /** A journey that runs over the closed line. */
   journey: { from: { id: string; name: string }; to: { id: string; name: string } };
+  /** Hand-picked ways round to try when SBB and line memory have none (Renens – Morges: across the lake via Évian). */
+  detours?: { id: string; name: string }[];
   states: ReplayState[];
   updates: ReplayUpdate[];
   /** Minutes after the start (null: never). */
@@ -308,7 +310,7 @@ export function nextMove(s: Snapshot, conn: Connection): Move | null {
   const advice = relevantAdvice(conn, st, hits);
   const adviceAt = (a: Advice) => s.seen.find((u) => u.source === "ticker" && u.changes.some((c) => c.includes(a.text))) ?? s.seen.find((u) => u.source === "ticker");
   const via = advice.find((a) => a.kind === "via");
-  if (via?.via) return { tone: "act", headline: `Travel via ${via.via.name}`, detail: `SBB: “${via.text}” Your ${line} can't get through ${where}.`, source: said(adviceAt(via)), via: via.via };
+  if (via?.via) return { tone: "act", headline: `Travel via ${via.via.name}`, detail: `SBB: “${shiftClock(via.text, s)}” Your ${line} can't get through ${where}.`, source: said(adviceAt(via)), via: via.via };
   const bus = advice.find((a) => a.kind === "bus");
   if (bus)
     return {
@@ -327,7 +329,10 @@ export function nextMove(s: Snapshot, conn: Connection): Move | null {
       detail: `The control centre has ordered buses for ${where}. SBB hasn't announced them publicly yet.`,
       source: said(busStaff),
     };
-  const until = st.end !== null ? ` SBB expects it to reopen ${st.atLeast ? "at" : "around"} ${clockAt(s, st.end)}${st.atLeast ? " at the earliest" : ""}.` : "";
+  // Relative, not a clock time: a replay jumps ahead at each step, so "in 40 min" stays true where "11:08" would drift.
+  const left = st.end !== null ? st.end - s.t : null;
+  const until =
+    left === null ? "" : left <= 0 ? " SBB's estimate for reopening has passed." : ` SBB expects it to reopen in ${st.atLeast ? "no less than" : "about"} ${formatMinutes(left)}.`;
   return {
     tone: "act",
     headline: `Your ${line} can't get through`,

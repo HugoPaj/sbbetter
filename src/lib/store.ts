@@ -138,6 +138,11 @@ export function useStoreReady(): boolean {
   return useSyncExternalStore(noSubscribe, () => true, () => false);
 }
 
+/** The saved state right now, outside React (event handlers). */
+export function readState(): State {
+  return load();
+}
+
 export const actions = {
   addTicket(t: Ticket) {
     const s = load();

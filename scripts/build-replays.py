@@ -52,6 +52,8 @@ REPLAYS = [
         key="renens-morges",
         incident="2195005188970",
         journey=(("8501120", "Lausanne"), ("8501008", "Genève")),
+        # No rail way round Renens – Morges: across the lake (metro, boat to Évian, Léman Express to Genève).
+        detours=[("8774567", "Évian-les-Bains")],
         pitch="Lausanne – Genève cut for 4 h.",
         staff={
             "364370": ("info", "Overhead line damaged, with a fire. Operating concept active from 17:30."),
@@ -365,6 +367,7 @@ def build(cfg):
         cause=reason,
         causeLabel=reasons.get(reason, reason),
         journey=dict(**{"from": dict(id=fid, name=fname)}, to=dict(id=tid, name=tname)),
+        detours=[dict(id=i, name=n) for i, n in cfg.get("detours", [])],
         states=states,
         updates=updates,
         outcome=dict(

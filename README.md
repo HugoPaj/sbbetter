@@ -238,14 +238,20 @@ by update, as SBB's three sources published them:
 
 - Profile → Demo → **Replay a real disruption**, or a connection's ⋮ → "Simulate a disruption" → "Replay a
   real disruption", or open any URL with `?replay=renens-morges` (`&step=5` to jump in). The app searches
-  the journey now and opens the first train the disruption hits.
+  the journey now, opens the first train the disruption hits and saves it as the trip you are on: Plan → "On
+  your way" shows it with the disruption and what to do, for as long as the replay runs.
+- On the trip, the disruption gives the same verdict as a simulated one: the ride over the closed line is
+  marked "Line closed" and a real connection to "Take instead" sits in the timeline, ready to accept. The way
+  round is SBB's detour once the ticker names one for this journey, else line memory's, else any connection
+  that keeps off the closed stretch, else the replay's hand-picked one (Lausanne – Genève: across the lake
+  via Évian).
 - A dock above the tab bar steps through the updates: **Next** / back, or the **→ / ←** keys on a laptop.
   Tap it for the sheet: what the traveller is told, "When will it be over?" (our forecast, SBB's, and in
   hindsight), and every update so far with its source (timetable, public ticker, staff only) and whether
   it changed anything for this trip.
 - When a step changes what the traveller should do, a notification slides in (the "right moment"). Updates
   that don't concern the trip (advice for Lausanne – Neuchâtel when going to Genève) send nothing.
-- Stop it from the sheet, or with "Reset demo data".
+- Stop it with the ✕ on the dock (or from the sheet, or "Reset demo data"). That also removes the trip it saved.
 
 **How it works:** the update shown happens "now"; the start and every clock time move by the same
 amount. The disruption, as it stood at that update, becomes an ordinary service alert on each live

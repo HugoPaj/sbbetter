@@ -1,5 +1,6 @@
 "use client";
 
+import { REPLAY_TRIP, ReplayTripCard, useReplay } from "@/components/replay";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -149,7 +150,9 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
 
   const [all, setAll] = useState(false);
   const riding = useRiding();
-  const upcomingAll = now === null ? [] : upcomingItems(trips, tickets, now * 1000);
+  // Demo: the trip a replayed disruption follows is the one the traveller is on; it leads the page, not the list.
+  const replayTrip = useReplay() ? settings[REPLAY_TRIP] : undefined;
+  const upcomingAll = now === null ? [] : upcomingItems(trips, tickets, now * 1000).filter((u) => !replayTrip || u.trip?.id !== replayTrip);
   const upcoming = all ? upcomingAll : upcomingAll.slice(0, UPCOMING_MAX);
   // The commute card already offers home and work.
   const commutePlace = (s: { id: string; name: string }) => !!commute && [commute.from, commute.to, commute.fromName, commute.toName].some((v) => v === s.id || v === s.name);
@@ -157,9 +160,12 @@ function Home({ pos, onSearchTo }: { pos: Position; onSearchTo: (to: Endpoint) =
 
   return (
     <div className={cn("px-[8.5px]", DESK_COL)}>
-      {riding && (
+      {(riding || replayTrip) && (
         <Section title="On your way">
-          <EasyRideCard />
+          <div className="space-y-1.25">
+            {riding && <EasyRideCard />}
+            {replayTrip && <ReplayTripCard />}
+          </div>
         </Section>
       )}
       <Section title="Commuting" action={commute ? { label: "Edit", onClick: () => setSetup(true) } : undefined}>

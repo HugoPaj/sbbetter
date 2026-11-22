@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronLeft, ChevronRight, CircleCheck, History, Lock, RotateCcw, Square, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Bell, BellOff, ChevronLeft, ChevronRight, CircleCheck, History, Lock, RotateCcw, Square, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { Sheet, Skeleton, cn, toast } from "./ui";
-import { PlanBLink } from "./line-memory";
+import { ConnectionCard } from "./journey";
 import { backtest, disruptionEnd } from "@/lib/disruption-forecast";
-import { connectionKey, queryForConnection, rememberConnections } from "@/lib/connection-key";
+import { connectionKey, loadConnection, queryForConnection, rememberConnections } from "@/lib/connection-key";
 import { formatMinutes, formatTime, zurichDateTime } from "@/lib/format";
 import { journeyHref, type JourneyQuery } from "@/lib/journey-query";
-import { findPlanB, type PlanB, type Stretch } from "@/lib/line-memory";
-import { actions, useSetting } from "@/lib/store";
+import { actions, readState, useAppState, useSetting } from "@/lib/store";
+import { boardingStop } from "@/lib/trip-label";
 import { getConnections, type Connection } from "@/lib/transport";
 import {
   clockAt,
@@ -22,9 +23,9 @@ import {
   nextMove,
   shiftClock,
   snapshot,
+  withReplay,
   type Move,
   type Replay,
-  type ReplayStop,
   type ReplayUpdate,
   type Snapshot,
   type Source,
@@ -68,7 +69,21 @@ export function useReplay(): Snapshot | null {
 
 /** Each step is "now" when it is picked: the clock times of the replay follow the real clock from there. */
 const go = (key: string, step: number) => actions.setSetting(SETTING, encodeRun({ key, step, anchor: Date.now() }));
-const stop = () => actions.setSetting(SETTING, "");
+/** Setting: id of the saved trip the replay follows (shown on the Plan page while it runs). */
+export const REPLAY_TRIP = "replayTrip";
+/** Setting: that trip was saved by the replay, so stopping it removes it again. */
+const REPLAY_TRIP_ADDED = "replayTripAdded";
+
+/** Ends the replay, and takes away the trip it saved. */
+export function stopReplay() {
+  actions.setSetting(SETTING, "");
+  const id = readSetting(REPLAY_TRIP);
+  if (id && readSetting(REPLAY_TRIP_ADDED)) actions.removeTrip(String(id));
+  actions.setSetting(REPLAY_TRIP, "");
+  actions.setSetting(REPLAY_TRIP_ADDED, false);
+}
+const stop = stopReplay;
+const readSetting = (key: string) => readState().settings[key];
 
 // ---------------------------------------------------------------------------
 // The trip the replay follows: the connection open on screen (set by the detail page)
@@ -119,7 +134,16 @@ async function start(r: Replay, router: ReturnType<typeof useRouter>, step = 0) 
     };
     const hit = [...list].sort((a, b) => firstHit(a) - firstHit(b))[0];
     if (!hit) throw new Error("no connections");
-    router.push(journeyHref("/connections/detail", queryForConnection(q, hit), { key: connectionKey(hit) }));
+    // The traveller is on this trip: it is saved, and the Plan page shows it while the replay runs.
+    const id = connectionKey(hit);
+    const query = queryForConnection(q, hit);
+    const old = readSetting(REPLAY_TRIP);
+    if (old && old !== id && readSetting(REPLAY_TRIP_ADDED)) actions.removeTrip(String(old));
+    const had = readState().trips.some((t) => t.id === id);
+    if (!had) actions.toggleTrip({ id, query, index: 0, departure: hit.from.departure ?? "", arrival: hit.to.arrival ?? "", summary: hit.products.join(" → "), fromStop: boardingStop(hit) });
+    actions.setSetting(REPLAY_TRIP, id);
+    actions.setSetting(REPLAY_TRIP_ADDED, !had || (old === id && !!readSetting(REPLAY_TRIP_ADDED)));
+    router.push(journeyHref("/connections/detail", query, { key: id }));
   } catch {
     router.push(journeyHref("/connections", q));
   }
@@ -228,6 +252,9 @@ export function ReplayDock() {
             <button onClick={() => step(1)} aria-label="Next update" className="flex h-9 items-center gap-0.5 rounded-full bg-sbb-red pr-2.5 pl-3 text-[13px] font-bold text-white transition-colors hover:bg-[#d40000]">
               Next
               <ChevronRight className="size-4.5" strokeWidth={2} />
+            </button>
+            <button onClick={stop} aria-label="Stop the replay" className="flex size-9 items-center justify-center rounded-full transition-colors hover:bg-fg/10">
+              <X className="size-4.5" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -370,12 +397,10 @@ function ReplaySheet({ snap, trip, onStep, onPick, onClose }: { snap: Snapshot; 
   }
   const move = trip ? nextMove(snap, trip.conn) : null;
   const shown = r.updates.slice(0, snap.step + 1).map((u, i) => ({ u, i })).reverse();
-  const hours = Math.round(snap.shift / 3600e3);
   return (
     <Sheet title={`Replay: ${r.title}`} onClose={onClose} full>
       <p className="text-[12.5px] leading-snug font-light text-muted">
-        {dayOf(r.start)}, from {thenAt(r.start)} · {r.causeLabel}. Times moved to today ({hours >= 0 ? "+" : ""}
-        {hours} h), so it plays on live trains.
+        {dayOf(r.start)}, from {thenAt(r.start)} · {r.causeLabel}. Clock times are moved to today, so it plays on live trains.
       </p>
 
       <div className="sticky top-0 z-10 -mx-4 mt-2.5 flex items-center gap-2 bg-[#171717] px-4 py-2 light:bg-[#f2f2f2]">
@@ -400,7 +425,7 @@ function ReplaySheet({ snap, trip, onStep, onPick, onClose }: { snap: Snapshot; 
           <p className="text-[12px] font-bold tracking-wide text-muted uppercase">
             Your trip · {trip.query.fromName} → {trip.query.toName}, {formatTime(trip.conn.from.departure)}
           </p>
-          {move ? <MoveLine move={move} snap={snap} className="mt-1.5" /> : <p className="mt-1.5 text-[14px] font-light">Not affected so far. Nothing to tell you.</p>}
+          {move ? <MoveLine move={move} className="mt-1.5" /> : <p className="mt-1.5 text-[14px] font-light">Not affected so far. Nothing to tell you.</p>}
         </section>
       )}
       {!trip && <p className="mt-2 text-[13.5px] font-light">Open a connection that runs over the closed line to see what its traveller is told.</p>}
@@ -524,7 +549,7 @@ function Lead({ snap }: { snap: Snapshot }) {
 // On the connection page: what to do now
 // ---------------------------------------------------------------------------
 
-function MoveLine({ move, snap, className }: { move: Move; snap: Snapshot; className?: string }) {
+function MoveLine({ move, className }: { move: Move; className?: string }) {
   const Icon = move.tone === "ok" ? CircleCheck : TriangleAlert;
   return (
     <div className={className}>
@@ -532,59 +557,58 @@ function MoveLine({ move, snap, className }: { move: Move; snap: Snapshot; class
         <Icon className={cn("mt-px size-4.5 shrink-0", move.tone === "ok" ? "text-ok" : move.tone === "act" ? "text-sbb-red" : "text-amber-400")} strokeWidth={2} />
         <span className="text-[14.5px] leading-snug font-bold">{move.headline}</span>
       </p>
-      <p className="mt-1 pl-7 text-[14px] leading-snug font-light">{shiftClock(move.detail, snap)}</p>
+      <p className="mt-1 pl-7 text-[14px] leading-snug font-light">{move.detail}</p>
       {move.source && <p className="mt-0.5 pl-7 text-[12px] font-light text-muted">{move.source}</p>}
     </div>
   );
 }
 
-/** The detour SBB advised, as a stretch line memory's Plan B search understands. */
-function adviceStretch(snap: Snapshot, conn: Connection, via: ReplayStop): Stretch | null {
-  const st = snap.state;
-  const seg = st?.segments.find((s) => hitSections(conn, { ...st, segments: [s] }).length);
-  if (!st || !seg) return null;
-  return {
-    key: `replay:${snap.replay.key}:${via.id}`,
-    ends: seg.map((x) => ({ name: x.name, id: x.id, lat: x.lat, lon: x.lon })),
-    line: null,
-    n: 0,
-    closed: 0,
-    causes: [],
-    bus: { of: 0, n: 0, after: null },
-    detours: [{ via: via.name, id: via.id, n: 1, after: null, quote: null, quoted: null, staff: false }],
-    ticketVia: [],
-    incidents: [],
-  };
+// ---------------------------------------------------------------------------
+// On the Plan page: the trip the traveller is on, while the replay runs
+// ---------------------------------------------------------------------------
+
+/** The saved trip a running replay follows, and that trip as it runs today. */
+export function useReplayTrip() {
+  const snap = useReplay();
+  const { trips, settings } = useAppState();
+  const trip = snap ? trips.find((t) => t.id === settings[REPLAY_TRIP]) : undefined;
+  const [loaded, setLoaded] = useState<{ id: string; conn: Connection | null } | null>(null);
+  const id = trip?.id ?? null;
+  useEffect(() => {
+    if (!id || !trip) return;
+    const ctrl = new AbortController();
+    // A re-routed trip's id is "<planned key>~<onward key>"; the onward part is in its params.
+    loadConnection(trip.query, new URLSearchParams({ key: id.split("~")[0], ...trip.params }), ctrl.signal)
+      .then((conn) => setLoaded({ id, conn }))
+      .catch((e: Error) => e.name !== "AbortError" && setLoaded({ id, conn: null }));
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the id covers the trip's query and params.
+  }, [id]);
+  return { snap, trip, conn: id && loaded?.id === id ? loaded.conn : undefined };
 }
 
 /**
- * The head of a connection hit by the replayed disruption: what to do now, and,
- * when SBB names a detour for this journey, that detour as a real connection.
+ * Plan → "On your way" during a replay: the trip with its timeline and the disruption on it,
+ * and what to do now. Opens the trip, where the way round is offered.
  */
-export function ReplayMove({ snap, conn, query }: { snap: Snapshot; conn: Connection; query: JourneyQuery }) {
+export function ReplayTripCard() {
+  const { snap, trip, conn } = useReplayTrip();
+  if (!snap || !trip) return null;
+  const href = journeyHref("/connections/detail", trip.query, { key: trip.id, ...trip.params });
+  if (conn === undefined) return <Skeleton className="h-[118px] rounded-[19px]" />;
+  if (conn === null) return <p className="px-1 text-[14px] font-light">This trip can no longer be found.</p>;
   const move = nextMove(snap, conn);
-  const via = move?.via;
-  const stretch = via ? adviceStretch(snap, conn, via) : null;
-  const key = stretch ? `${stretch.key}|${connectionKey(conn)}` : null;
-  const [plan, setPlan] = useState<{ key: string; plan: PlanB | null } | null>(null);
-  useEffect(() => {
-    if (!key || !stretch || !via) return;
-    let live = true;
-    findPlanB(queryForConnection(query, conn), conn.to.arrivalTimestamp ?? 0, stretch, undefined, via.id)
-      .catch(() => null)
-      .then((p) => live && setPlan({ key, plan: p }));
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` covers the stretch, the detour and the connection.
-  }, [key]);
-  if (!move) return null;
-  const found = plan?.key === key ? plan.plan : undefined;
   return (
-    <div>
-      <MoveLine move={move} snap={snap} />
-      {via && found === undefined && <Skeleton className="mt-2 ml-7 h-[72px] rounded-[15px]" />}
-      {via && found && <PlanBLink plan={found} className="mt-2 ml-7" />}
+    <div className="space-y-1.25">
+      <ConnectionCard connection={withReplay(conn, snap)} href={href} />
+      <Link href={href} className="flex items-start gap-2.5 rounded-[19px] bg-surface px-[15px] py-3 transition-colors hover:bg-[#2b2b2b] light:hover:bg-[#f5f5f5]">
+        {move ? (
+          <MoveLine move={move} className="min-w-0 flex-1" />
+        ) : (
+          <span className="flex-1 text-[14.5px] leading-snug font-light">Your trip isn&apos;t affected so far.</span>
+        )}
+        <ChevronRight className="mt-0.5 size-4.25 shrink-0 text-fg/70" strokeWidth={1.5} />
+      </Link>
     </div>
   );
 }

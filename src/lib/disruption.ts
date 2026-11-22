@@ -48,6 +48,8 @@ export type Verdict = {
   };
   /** A closed line: what line memory needs to say what usually happens next. */
   closure?: Closure;
+  /** Small print after the explanation; default "(Simulated for this demo.)". */
+  note?: string;
 };
 
 const SMALL_DELAY = 4;
@@ -58,7 +60,7 @@ const WHY_LATE = "Signal fault on the line. Trains in this area are running late
 const lineOf = (s: Section) => [s.journey?.category, s.journey?.number].filter(Boolean).join(" ");
 
 /** "IC 5 at 12:41 from Pl. 4" */
-function boarding(c: Connection): string {
+export function boarding(c: Connection): string {
   const s = c.sections.find((x) => x.journey);
   if (!s) return `connection at ${formatTime(c.from.departure)}`;
   const pl = s.departure.prognosis?.platform ?? s.departure.platform;
@@ -221,7 +223,14 @@ export function ridesClosed(s: Section, closed: Section): boolean {
  * No known detour: the first real connection from `from` that keeps off the closed leg,
  * on another line or on foot. Fastest arrival among the next few departures.
  */
-async function wayAround(from: JourneyQuery, conn: Connection, closed: Section, signal?: AbortSignal): Promise<Verdict["alternative"] | undefined> {
+export async function wayAround(
+  from: JourneyQuery,
+  conn: Connection,
+  closed: Section,
+  signal?: AbortSignal,
+  /** Whether a ride runs over the closed part; default: it shares two stops with the closed leg. */
+  blocked: (s: Section) => boolean = (s) => ridesClosed(s, closed),
+): Promise<Verdict["alternative"] | undefined> {
   const q: JourneyQuery = { ...from, isArrivalTime: false };
   const list = await getConnections({ ...toConnectionsRequest(q), limit: 6 }, signal).catch((e: Error) => {
     if (e.name === "AbortError") throw e;
@@ -230,7 +239,7 @@ async function wayAround(from: JourneyQuery, conn: Connection, closed: Section, 
   // Not one that has left before the traveller gets there (a minute's grace, plus any walk to the first stop).
   const earliest = (closed.departure.departureTimestamp ?? 0) - 60 - (conn.accessWalk?.minutes ?? 0) * 60;
   const ok = list
-    .filter((c) => (c.from.departureTimestamp ?? 0) >= earliest && !c.sections.some((s) => ridesClosed(s, closed)))
+    .filter((c) => (c.from.departureTimestamp ?? 0) >= earliest && !c.sections.some(blocked))
     .sort((a, b) => (a.to.arrivalTimestamp ?? 0) - (b.to.arrivalTimestamp ?? 0));
   const best = ok[0];
   return best && { query: queryForConnection(q, best), connection: best, lateMinutes: lateBy(best, conn) };

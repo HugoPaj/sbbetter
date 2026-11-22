@@ -16,8 +16,9 @@ import { journeyFromSearchParams, journeyHref, toConnectionsRequest } from "@/li
 import { VerdictBanner } from "@/components/verdict-card";
 import { ClosureDetails, ClosurePlanB, LegMemory, useRouteMemory } from "@/components/line-memory";
 import { closureOf } from "@/lib/line-memory";
-import { ReplayMove, showReplayPicker, useReplay, watchTrip } from "@/components/replay";
-import { hitSections, nextMove, withReplay } from "@/lib/replay";
+import { REPLAY_TRIP, showReplayPicker, useReplay, watchTrip } from "@/components/replay";
+import { withReplay } from "@/lib/replay";
+import { replayVerdict } from "@/lib/replay-verdict";
 import { cachedConnection, connectionKey, loadConnection, queryForConnection, rememberConnections, rerouteFromSearchParams, rerouteParams, stitch, uniqueConnections } from "@/lib/connection-key";
 import { assess, type LegStatus, type Scenario, type Verdict } from "@/lib/disruption";
 import { usePasses } from "@/lib/travelcards";
@@ -60,7 +61,7 @@ export function DetailView() {
   /** What happened the last times the stretches of this route were disrupted. */
   const routeMemory = useRouteMemory(conn);
   const passes = usePasses();
-  const { trips, tickets } = useAppState();
+  const { trips, tickets, settings } = useAppState();
   const [sheet, setSheet] = useState<"more" | "sim" | "time" | null>(null);
   const [showTicket, setShowTicket] = useState(false);
   const clock = useNow();
@@ -114,6 +115,19 @@ export function DetailView() {
     return () => ctrl.abort();
   }, [conn, raw, scenario, assessId]);
 
+  // Demo: a replayed real disruption that hits this trip gives the same kind of verdict, with the way round to take.
+  const [replayAssessed, setReplayAssessed] = useState<{ raw: string; id: string; verdict: Verdict | null } | null>(null);
+  const replayHit = !scenario && !!replay && !!conn?.disruptions?.some((d) => d.replay);
+  useEffect(() => {
+    const q = journeyFromSearchParams(new URLSearchParams(raw));
+    if (!replayHit || !conn || !q || !replay) return;
+    const ctrl = new AbortController();
+    replayVerdict(conn, q, replay, ctrl.signal)
+      .then((verdict) => setReplayAssessed({ raw, id: replay.id, verdict }))
+      .catch((e: Error) => e.name !== "AbortError" && setReplayAssessed({ raw, id: replay.id, verdict: null }));
+    return () => ctrl.abort();
+  }, [replayHit, conn, raw, replay]);
+
   // The replay follows the trip on screen: it is the one its notifications are about.
   useEffect(() => {
     const q = journeyFromSearchParams(new URLSearchParams(raw));
@@ -123,8 +137,10 @@ export function DetailView() {
   const priceOf = usePrices(conn ? [conn] : null, passes);
   if (!query) return <ErrorBox message="No journey selected." />;
 
-  const verdict = scenario && assessed.id === assessId ? assessed.verdict : null;
-  const checking = !!scenario && !!conn && assessed.id !== assessId;
+  // While the next step of a replay is assessed, the last verdict for this trip stays up (no flicker).
+  const replayed = replayHit && replayAssessed?.raw === raw ? replayAssessed.verdict : null;
+  const verdict = scenario ? (assessed.id === assessId ? assessed.verdict : null) : replayed;
+  const checking = (!!scenario && !!conn && assessed.id !== assessId) || (replayHit && replayAssessed?.raw !== raw);
   const saved = trips.some((t) => t.id === tripId);
   /** A still-valid ticket bought for this very journey (Offers links it): open it instead of buying again. */
   const ticket = tickets.find((k) => k.trip && (k.trip.id === tripId || k.trip.id === key) && (clock === null || Date.parse(k.validTo) >= clock * 1000));
@@ -173,6 +189,8 @@ export function DetailView() {
           departure: conn.from.departure ?? "",
         }
       : { query: altQuery, id: altKey, params: undefined, departure: chosen.from.departure ?? "" };
+    // The trip a replay follows (on the Plan page) becomes the new one.
+    if (settings[REPLAY_TRIP] === tripId) actions.setSetting(REPLAY_TRIP, next.id);
     if (saved) {
       actions.removeTrip(tripId);
       if (!trips.some((t) => t.id === next.id))
@@ -264,11 +282,7 @@ export function DetailView() {
   };
 
   const carried = reroute ?? pendingLate;
-  // A replayed line closure: the rides over the closed stretch are drawn as such (not once trains run again).
-  const replayed = conn?.disruptions?.some((d) => d.replay) && replay?.state && !replay.state.limited ? hitSections(conn, replay.state) : [];
-  const replayMove = replay && conn?.disruptions?.some((d) => d.replay) ? nextMove(replay, conn) : null;
-  const statusAt = (i: number): LegStatus | undefined =>
-    verdict ? verdict.notes[i] : replayed.includes(i) ? { kind: "closed" } : carried?.late && i === carried.at ? { kind: "late", minutes: carried.late } : undefined;
+  const statusAt = (i: number): LegStatus | undefined => (verdict ? verdict.notes[i] : carried?.late && i === carried.at ? { kind: "late", minutes: carried.late } : undefined);
   const lateTs = (i: number) => {
     const st = statusAt(i);
     return (conn?.sections[i]?.arrival.arrivalTimestamp ?? 0) + (st?.kind === "late" ? st.minutes * 60 : 0);
@@ -391,13 +405,12 @@ export function DetailView() {
                       }
                     />
                   )}
-                  {replayMove && replay && <ReplayMove snap={replay} conn={conn} query={query} />}
                   {!!conn.disruptions?.length && (
                     <DisruptionNotices
                       disruptions={conn.disruptions}
-                      // SBB's own detour for this journey (in the replay) comes first; line memory's would repeat it.
-                      planB={!replayMove?.via && replayMove?.tone !== "ok" && liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
-                      details={liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      // A verdict (simulated or replayed) already offers the way round in the timeline.
+                      planB={!verdict && liveClosure && routeMemory && <ClosurePlanB route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
+                      details={!verdict && liveClosure && routeMemory && <ClosureDetails route={routeMemory} conn={conn} query={query} closure={liveClosure} />}
                     />
                   )}
                   {pass && <PassNotice pass={pass} pricing={!fare} trip={{ from: conn.from.station.name, to: conn.to.station.name }} />}
