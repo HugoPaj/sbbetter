@@ -26,11 +26,18 @@ function configure() {
   configured = true;
 }
 
+/** What the service worker shows (public/sw.js, "push"). */
+export type PushPayload = { title: string; body: string; url: string; tag: string };
+
 /** Sends one notification; false when the subscription is gone (unsubscribed, app removed), which is then forgotten. */
 async function send(record: PushRecord, alert: CommuteAlert): Promise<boolean> {
+  return sendPayload(record, { title: alert.title, body: alert.body, url: alert.url, tag: `commute-${alert.kind}` }, alert.kind === "ok" ? "normal" : "high");
+}
+
+async function sendPayload(record: PushRecord, payload: PushPayload, urgency: "normal" | "high"): Promise<boolean> {
   configure();
   try {
-    await sendNotification(record.subscription, JSON.stringify({ title: alert.title, body: alert.body, url: alert.url, tag: `commute-${alert.kind}` }), { TTL: 30 * 60, urgency: alert.kind === "ok" ? "normal" : "high" });
+    await sendNotification(record.subscription, JSON.stringify(payload), { TTL: 30 * 60, urgency });
     return true;
   } catch (e) {
     if (e instanceof WebPushError && (e.statusCode === 404 || e.statusCode === 410)) {
@@ -86,6 +93,14 @@ export async function checkNow(origin: string, endpoint: string): Promise<Commut
   const alert = await checkCommute(r.commute, leg);
   if (alert && !(await send(r, alert))) throw new GoneError();
   return alert;
+}
+
+/** A replay update (demo) to a subscribed device, through its push service. False: not subscribed here. */
+export async function pushTo(endpoint: string, payload: PushPayload): Promise<boolean> {
+  const r = await pushStore().get(endpoint);
+  if (!r) return false;
+  if (!(await sendPayload(r, payload, "high"))) throw new GoneError();
+  return true;
 }
 
 /** The device's subscription expired or was removed (it has been forgotten). */

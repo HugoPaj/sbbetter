@@ -81,3 +81,51 @@ export async function checkCommuteNow(): Promise<string> {
   const { sent } = await json(await fetch("/api/push/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }));
   return sent;
 }
+
+/**
+ * Ask to show notifications, without subscribing to push. Call it straight from a tap
+ * (iOS ignores the request otherwise). Quiet when it can't ask: not installed, no worker, already answered.
+ */
+export async function askToNotify(): Promise<void> {
+  if (pushSupport() !== "ok" || Notification.permission !== "default") return;
+  await Notification.requestPermission().catch(() => {});
+}
+
+/**
+ * A demo notification (replay updates), as real as this device allows: through the server
+ * and the push service when it is subscribed (commute alerts on), else shown locally by the
+ * worker. False when neither works, so the caller shows its own banner.
+ */
+export async function notify(n: { title: string; body: string; url: string; tag: string }): Promise<boolean> {
+  const sub = await currentSubscription().catch(() => null);
+  if (sub && Notification.permission === "granted") {
+    const res = await fetch("/api/push/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint, ...n }) }).catch(() => null);
+    if (res?.ok) return true;
+  }
+  return notifyHere(n);
+}
+
+/**
+ * Show a system notification from this device (no server, no push): it lands in the
+ * notification centre like a real one, and tapping it opens `url`. Returns false when
+ * it can't (not installed, no worker, not allowed), so the caller can show its own banner.
+ */
+export async function notifyHere(n: { title: string; body: string; url: string; tag: string }): Promise<boolean> {
+  if (pushSupport() !== "ok" || Notification.permission !== "granted") return false;
+  const reg = await registration().catch(() => null);
+  if (!reg) return false;
+  try {
+    await reg.showNotification(n.title, {
+      body: n.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: n.tag,
+      // A newer update replaces the old one, and still buzzes (not in TS's lib types yet).
+      ...({ renotify: true } as NotificationOptions),
+      data: { url: n.url },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

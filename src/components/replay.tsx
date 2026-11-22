@@ -11,6 +11,7 @@ import { connectionKey, loadConnection, queryForConnection, rememberConnections 
 import { formatMinutes, formatTime, zurichDateTime } from "@/lib/format";
 import { journeyHref, type JourneyQuery } from "@/lib/journey-query";
 import { actions, readState, useAppState, useSetting } from "@/lib/store";
+import { askToNotify, notify } from "@/lib/push";
 import { boardingStop } from "@/lib/trip-label";
 import { getConnections, type Connection } from "@/lib/transport";
 import {
@@ -198,7 +199,20 @@ export function ReplayDock() {
     const prev = last.current;
     last.current = { key: snap.replay.key, step: snap.step, move: said };
     if (!move || !prev || prev.key !== snap.replay.key || snap.step <= prev.step || prev.move === said) return;
-    setBanner({ move, trip, id: Date.now() });
+    // A real notification on the installed app: pushed by the server if subscribed, else shown locally
+    // (allowed when the replay was picked). Neither: the app's own banner.
+    let live = true;
+    void notify({
+      title: move.headline,
+      body: `${trip.query.fromName} → ${trip.query.toName}\n${move.detail}`,
+      url: trip.href,
+      tag: `replay-${snap.replay.key}`,
+    }).then((shown) => {
+      if (!shown && live) setBanner({ move, trip, id: Date.now() });
+    });
+    return () => {
+      live = false;
+    };
   }, [snap, trip]);
   useEffect(() => {
     if (!banner) return;
@@ -310,6 +324,8 @@ export function ReplayDock() {
           replays={replays}
           running={snap?.replay.key}
           onPick={(r) => {
+            // From the tap itself: iOS only asks then. The replay's updates come as notifications.
+            void askToNotify();
             setSheet(null);
             void start(r, router);
           }}
